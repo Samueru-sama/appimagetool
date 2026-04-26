@@ -20,6 +20,7 @@ pub struct Config {
     pub optimize_launch: bool,
     pub version: Option<String>,
     pub mkdwarfs: Option<PathBuf>,
+    pub dwarfs_url: Option<String>,
     pub tmpdir: PathBuf,
     pub keep_mount: bool,
     pub devel_release: bool,
@@ -39,6 +40,7 @@ impl Config {
         optimize_launch: bool,
         dwarfs_profile: Option<PathBuf>,
         mkdwarfs: Option<PathBuf>,
+        dwarfs_url: Option<String>,
         tmpdir: Option<PathBuf>,
     ) -> crate::error::Result<Self> {
         // Env vars with clap `env =` are already resolved by the CLI.
@@ -100,17 +102,20 @@ impl Config {
             env_vars,
             dwarfs_profile,
             optimize_launch,
-            version: env_opt("VERSION").or_else(|| {
-                let v = dirs_home().join("version");
-                if v.exists() {
-                    std::fs::read_to_string(&v)
-                        .ok()
-                        .map(|s| s.trim().to_string())
-                } else {
-                    None
-                }
-            }),
+            version: env_opt("VERSION")
+                .or_else(|| {
+                    let v = dirs_home().join("version");
+                    if v.exists() {
+                        std::fs::read_to_string(&v)
+                            .ok()
+                            .map(|s| s.trim().to_string())
+                    } else {
+                        None
+                    }
+                })
+                .map(|v| strip_epoch(&v)),
             mkdwarfs,
+            dwarfs_url: dwarfs_url.or_else(|| env_opt("DWARFS_LINK")),
             tmpdir,
             keep_mount,
             devel_release,
@@ -123,4 +128,14 @@ fn dirs_home() -> PathBuf {
         .or_else(|_| env::var("USERPROFILE"))
         .map(PathBuf::from)
         .unwrap_or_else(|_| PathBuf::from("~"))
+}
+
+/// Strip the epoch prefix from a version string.
+/// Shell equivalent: `${VERSION#*:}` — removes everything up to
+/// and including the first colon.  `"1:2.0.1"` → `"2.0.1"`.
+fn strip_epoch(version: &str) -> String {
+    match version.find(':') {
+        Some(i) => version[i + 1..].to_string(),
+        None => version.to_string(),
+    }
 }

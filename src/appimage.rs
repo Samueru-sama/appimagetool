@@ -8,6 +8,7 @@ use crate::desktop::{self, DesktopEntry};
 use crate::dwarfs;
 use crate::error::Result;
 use crate::uruntime;
+use crate::util;
 
 /// Run the full AppImage build pipeline.
 pub fn build(config: &Config) -> Result<()> {
@@ -15,11 +16,19 @@ pub fn build(config: &Config) -> Result<()> {
     DesktopEntry::check_apprun(&config.appdir)?;
     DesktopEntry::check_dir_icon(&config.appdir)?;
 
+    // Sort .env: move all "unset" lines to the end.
+    // The dotenv library used by sharun requires unset lines last.
+    sort_env_file(&config.appdir)?;
+
     // Parse desktop entry
     let desktop = DesktopEntry::from_appdir(&config.appdir)?;
 
-    // Determine app name and version
-    let app_name = desktop.name.clone();
+    // Determine app name: APPNAME env var overrides desktop entry.
+    // Sanitize the same way the shell script does.
+    let app_name_raw = std::env::var("APPNAME")
+        .ok()
+        .unwrap_or_else(|| desktop.name.clone());
+    let app_name = util::sanitize_filename(&app_name_raw);
     let version = config.version.as_deref().unwrap_or("UNKNOWN");
 
     // Handle devel release: patch desktop entry and update info
@@ -147,5 +156,40 @@ fn write_appinfo(output_dir: &Path, name: &str, version: &str, arch: &str) -> Re
     writeln!(f, "X-AppImage-Name={name}")?;
     writeln!(f, "X-AppImage-Version={version}")?;
     writeln!(f, "X-AppImage-Arch={arch}")?;
+    Ok(())
+}
+
+/// Sort the AppDir's `.env` file so all lines starting with `unset`
+/// come after every other line. The dotenv library used by sharun
+/// requires this ordering.
+fn sort_env_file(appdir: &Path) -> Result<()> {
+    let env_path = appdir.join(".env");
+    if !env_path.exists() {
+        return Ok(());
+    }
+
+    let content = std::fs::read_to_string(&env_path)?;
+    let mut regular = Vec::new();
+    let mut unsets = Vec::new();
+
+    for line in content.lines() {
+        if line.starts_with("unset") {
+            unsets.push(line);
+        } else {
+            regular.push(line);
+        }
+    }
+
+    let mut sorted = String::new();
+    for line in &regular {
+        sorted.push_str(line);
+        sorted.push('\n');
+    }
+    for line in &unsets {
+        sorted.push_str(line);
+        sorted.push('\n');
+    }
+
+    std::fs::write(&env_path, sorted)?;
     Ok(())
 }

@@ -34,7 +34,11 @@ pub fn resolve_mkdwarfs(config: &Config) -> Result<PathBuf> {
     }
 
     // Download
-    let url = DEFAULT_DWARFS_URL_TEMPLATE.replace("{arch}", &config.arch);
+    let url = config
+        .dwarfs_url
+        .as_deref()
+        .unwrap_or(DEFAULT_DWARFS_URL_TEMPLATE)
+        .replace("{arch}", &config.arch);
     eprintln!("Downloading mkdwarfs from {url}...");
     util::download(&url, &cached)?;
     set_executable(&cached)?;

@@ -50,6 +50,10 @@ struct Cli {
     #[arg(long, env = "DWARFS_CMD")]
     mkdwarfs: Option<PathBuf>,
 
+    /// URL to download mkdwarfs from
+    #[arg(long, env = "DWARFS_LINK")]
+    dwarfs_url: Option<String>,
+
     /// Temporary directory
     #[arg(long, env = "TMPDIR", default_value = "/tmp")]
     tmpdir: Option<PathBuf>,
@@ -70,6 +74,7 @@ fn main() {
         cli.optimize_launch,
         cli.dwarfs_profile,
         cli.mkdwarfs,
+        cli.dwarfs_url,
         cli.tmpdir,
     )
     .unwrap_or_else(|e| {
