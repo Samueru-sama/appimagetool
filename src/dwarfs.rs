@@ -84,9 +84,14 @@ pub fn build_appimage(
             .arg(format!("--hotness-list={}", profile.display()));
     }
 
-    // Add compression. Can contain multiple args like "zstd:level=22 -S26 -B6"
-    for part in compression.split_whitespace() {
-        cmd.arg("-C");
+    // Add compression options. The string can contain multiple space-separated
+    // args like "zstd:level=22 -S26 -B6". The first part goes to -C, the rest
+    // are passed as separate args.
+    let mut parts = compression.split_whitespace().peekable();
+    if let Some(comp_algo) = parts.next() {
+        cmd.arg("-C").arg(comp_algo);
+    }
+    for part in parts {
         cmd.arg(part);
     }
 
