@@ -25,10 +25,14 @@ pub fn resolve_runtime(config: &Config) -> Result<PathBuf> {
         )));
     }
 
-    // Check cache in tmpdir
-    let cached = config.tmpdir.join("uruntime");
+    // Check cache in tmpdir (include arch in name for cross-builds)
+    let cached = config.tmpdir.join(format!("uruntime-{}", config.arch));
     if cached.exists() && util::is_elf(&cached) {
-        return Ok(cached);
+        // Return a copy so the cached original stays pristine
+        let work = config.tmpdir.join(format!("uruntime-{}.work", config.arch));
+        std::fs::copy(&cached, &work)?;
+        set_executable(&work)?;
+        return Ok(work);
     }
 
     // Download
@@ -50,7 +54,11 @@ pub fn resolve_runtime(config: &Config) -> Result<PathBuf> {
         });
     }
 
-    Ok(cached)
+    // Return a working copy so the cached original stays pristine
+    let work = config.tmpdir.join(format!("uruntime-{}.work", config.arch));
+    std::fs::copy(&cached, &work)?;
+    set_executable(&work)?;
+    Ok(work)
 }
 
 /// Configure the runtime: write ELF sections for update info and env vars,
