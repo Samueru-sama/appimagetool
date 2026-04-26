@@ -50,6 +50,8 @@ Options:
       --mkdwarfs <MKDWARFS>        Path to mkdwarfs binary [env: DWARFS_CMD]
       --dwarfs-url <DWARFS_URL>    URL to download mkdwarfs from [env: DWARFS_LINK]
       --tmpdir <TMPDIR>            Temporary directory [env: TMPDIR] [default: /tmp]
+  -v, --verbose...                 Increase verbosity (can be repeated: -v, -vv)
+  -q, --quiet...                   Suppress informational output (can be repeated: -q, -qq)
   -h, --help                       Print help
   -V, --version                    Print version
 ```
@@ -115,10 +117,7 @@ src/
 ├── dwarfs.rs     # mkdwarfs resolution, image building, profiling
 ├── elf.rs        # ELF section read/write/patch
 ├── error.rs      # Error types with actionable hints
+├── log.rs        # Structured logging with verbosity levels
 ├── uruntime.rs   # Runtime download, caching, configuration
 └── util.rs       # Download with retry, sanitize, ELF detection
 ```
-
-## License
-
-Same as the parent project.
