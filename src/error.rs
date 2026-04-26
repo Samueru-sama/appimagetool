@@ -4,38 +4,61 @@ use thiserror::Error;
 
 #[derive(Debug, Error)]
 pub enum Error {
-    #[error("AppDir not found: {0}")]
+    #[error(
+        "AppDir not found: {0}\n  hint: provide a valid AppDir path via --appdir or the APPDIR env var"
+    )]
     AppDirNotFound(PathBuf),
 
-    #[error("No .desktop file found in AppDir")]
+    #[error(
+        "No .desktop file found in AppDir\n  \
+         hint: place exactly one .desktop file in the AppDir root"
+    )]
     NoDesktopEntry,
 
-    #[error("No .DirIcon found in AppDir")]
+    #[error(
+        "No .DirIcon found in AppDir\n  \
+         hint: add a PNG/SVG icon as .DirIcon in the AppDir root"
+    )]
     NoDirIcon,
 
-    #[error("No AppRun found in AppDir")]
+    #[error(
+        "No AppRun found in AppDir\n  \
+         hint: add an executable AppRun script in the AppDir root"
+    )]
     NoAppRun,
 
-    #[error("Failed to download {url}: {reason}")]
+    #[error(
+        "Failed to download {url}: {reason}\n  hint: check your network connection and the URL"
+    )]
     DownloadFailed { url: String, reason: String },
 
-    #[error("ELF section '{0}' not found in runtime")]
+    #[error(
+        "ELF section '{0}' not found in runtime\n  \
+         hint: the runtime binary may be incompatible or corrupted; \
+         try a different --runtime or remove the cached download"
+    )]
     SectionNotFound(String),
 
-    #[error("Data too large for section '{name}': {size} > {capacity}")]
+    #[error(
+        "Data too large for ELF section '{name}': {size} > {capacity} bytes\n  \
+         hint: shorten the value or use a runtime with larger ELF sections"
+    )]
     SectionOverflow {
         name: String,
         size: usize,
         capacity: usize,
     },
 
-    #[error("mkdwarfs failed: {0}")]
+    #[error("mkdwarfs failed: {0}\n  hint: check that the AppDir contents are valid and readable")]
     DwarfsFailed(String),
 
     #[error("mksquashfs failed: {0}")]
     SquashfsFailed(String),
 
-    #[error("zsync generation failed: {0}")]
+    #[error(
+        "zsync generation failed: {0}\n  \
+         hint: ensure the output AppImage was created successfully"
+    )]
     ZsyncGenerate(String),
 
     #[error("zsync write failed: {0}")]
