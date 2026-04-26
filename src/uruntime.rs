@@ -55,24 +55,29 @@ pub fn resolve_runtime(config: &Config) -> Result<PathBuf> {
 
 /// Configure the runtime: write ELF sections for update info and env vars,
 /// and optionally patch runtime behavior.
-pub fn configure_runtime(runtime_path: &Path, config: &Config) -> Result<()> {
+pub fn configure_runtime(
+    runtime_path: &Path,
+    update_info: Option<&str>,
+    env_vars: &[String],
+    keep_mount: bool,
+) -> Result<()> {
     let mut data = std::fs::read(runtime_path)?;
 
     // Write update info into .upd_info section
-    if let Some(ref upinfo) = config.update_info {
+    if let Some(upinfo) = update_info {
         eprintln!("Adding update information to runtime...");
         elf::write_section(&mut data, ".upd_info", upinfo.as_bytes())?;
     }
 
     // Write env vars into .envs section
-    if !config.env_vars.is_empty() {
+    if !env_vars.is_empty() {
         eprintln!("Adding environment variables to runtime...");
-        let env_data: String = config.env_vars.join("\n");
+        let env_data: String = env_vars.join("\n");
         elf::write_section(&mut data, ".envs", env_data.as_bytes())?;
     }
 
     // Patch URUNTIME_MOUNT if keep_mount is set
-    if config.keep_mount {
+    if keep_mount {
         eprintln!("Setting runtime to keep mount point...");
         elf::patch_section_string(
             &mut data,
@@ -84,8 +89,6 @@ pub fn configure_runtime(runtime_path: &Path, config: &Config) -> Result<()> {
             elf::patch_section_string(&mut data, ".envs", "URUNTIME_MOUNT=3", "URUNTIME_MOUNT=0")
         })
         .or_else(|_| {
-            // The runtime config may be in a different section or different value,
-            // try all common values
             for old in [
                 "URUNTIME_MOUNT=0",
                 "URUNTIME_MOUNT=1",

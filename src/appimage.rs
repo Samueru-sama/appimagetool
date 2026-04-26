@@ -20,8 +20,8 @@ pub fn build(config: &Config) -> Result<()> {
     let app_name = desktop.name.clone();
     let version = config.version.as_deref().unwrap_or("UNKNOWN");
 
-    // Handle devel release: patch desktop entry
-    if config.devel_release {
+    // Handle devel release: patch desktop entry and update info
+    let update_info = if config.devel_release {
         let content = std::fs::read_to_string(&desktop.path)?;
         if !content.contains("Nightly") {
             let patched = content
@@ -37,7 +37,14 @@ pub fn build(config: &Config) -> Result<()> {
                 .join("\n");
             std::fs::write(&desktop.path, patched)?;
         }
-    }
+        // Replace 'latest' with 'nightly' in update info
+        config
+            .update_info
+            .as_ref()
+            .map(|info| info.replace("|latest|", "|nightly|"))
+    } else {
+        config.update_info.clone()
+    };
 
     // Add X-AppImage-* metadata to desktop entry
     desktop.add_appimage_metadata(&app_name, version, &config.arch)?;
@@ -56,7 +63,12 @@ pub fn build(config: &Config) -> Result<()> {
     eprintln!("Using runtime: {}", runtime_path.display());
 
     // Configure runtime (ELF section editing)
-    uruntime::configure_runtime(&runtime_path, config)?;
+    uruntime::configure_runtime(
+        &runtime_path,
+        update_info.as_deref(),
+        &config.env_vars,
+        config.keep_mount,
+    )?;
 
     // Resolve mkdwarfs
     let mkdwarfs = dwarfs::resolve_mkdwarfs(config)?;
@@ -99,7 +111,7 @@ pub fn build(config: &Config) -> Result<()> {
     std::fs::set_permissions(&output_path, std::fs::Permissions::from_mode(0o755))?;
 
     // Generate zsync file if update info is set
-    if config.update_info.is_some() {
+    if update_info.is_some() {
         generate_zsync(&output_path, &output_name, &config.output_dir)?;
     }
 
