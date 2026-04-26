@@ -8,7 +8,7 @@ pub fn download(url: &str, dest: &Path) -> Result<()> {
     let mut last_err = String::new();
     for attempt in 0..5 {
         if attempt > 0 {
-            eprintln!("Download failed, retrying in 5s...");
+            crate::log_warn!("Download failed, retrying in 5s...");
             std::thread::sleep(std::time::Duration::from_secs(5));
         }
         match try_download(url, dest) {

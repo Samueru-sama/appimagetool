@@ -4,5 +4,6 @@ pub mod desktop;
 pub mod dwarfs;
 pub mod elf;
 pub mod error;
+pub mod log;
 pub mod uruntime;
 pub mod util;

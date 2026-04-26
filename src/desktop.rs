@@ -112,7 +112,7 @@ pub fn compute_output_name(app_name: &str, version: Option<&str>, arch: &str) ->
             format!("{app_name}-{v}-anylinux-{arch}.AppImage")
         }
         _ => {
-            eprintln!("WARNING: VERSION is not set, omitting from filename");
+            crate::log_warn!("VERSION is not set, omitting from filename");
             format!("{app_name}-anylinux-{arch}.AppImage")
         }
     }

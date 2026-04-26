@@ -71,7 +71,7 @@ pub fn build(config: &Config) -> Result<()> {
 
     // Resolve runtime
     let runtime_path = uruntime::resolve_runtime(config)?;
-    eprintln!("Using runtime: {}", runtime_path.display());
+    crate::log_info!("Using runtime: {}", runtime_path.display());
 
     // Configure runtime (ELF section editing)
     uruntime::configure_runtime(
@@ -83,7 +83,7 @@ pub fn build(config: &Config) -> Result<()> {
 
     // Resolve mkdwarfs
     let mkdwarfs = dwarfs::resolve_mkdwarfs(config)?;
-    eprintln!("Using mkdwarfs: {}", mkdwarfs.display());
+    crate::log_info!("Using mkdwarfs: {}", mkdwarfs.display());
 
     // DWARFS profile optimization (optional)
     let profile = if config.optimize_launch {
@@ -129,14 +129,14 @@ pub fn build(config: &Config) -> Result<()> {
     // Write appinfo file
     write_appinfo(&config.output_dir, &app_name, version, &config.arch)?;
 
-    eprintln!("All done! AppImage at: {}", output_path.display());
+    crate::log_info!("All done! AppImage at: {}", output_path.display());
 
     Ok(())
 }
 
 /// Generate a .zsync file using the zsync-rs library.
 fn generate_zsync(appimage: &Path, filename: &str, output_dir: &Path) -> Result<()> {
-    eprintln!("Generating .zsync file...");
+    crate::log_info!("Generating .zsync file...");
 
     let mut file = std::fs::File::open(appimage)?;
     let control = ControlFile::generate(&mut file, filename, filename, None)?;
@@ -145,7 +145,7 @@ fn generate_zsync(appimage: &Path, filename: &str, output_dir: &Path) -> Result<
     let mut out = std::fs::File::create(&zsync_path)?;
     control.write(&mut out)?;
 
-    eprintln!("Wrote {}", zsync_path.display());
+    crate::log_info!("Wrote {}", zsync_path.display());
     Ok(())
 }
 

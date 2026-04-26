@@ -57,10 +57,22 @@ struct Cli {
     /// Temporary directory
     #[arg(long, env = "TMPDIR", default_value = "/tmp")]
     tmpdir: Option<PathBuf>,
+
+    /// Increase verbosity (can be repeated: -v, -vv)
+    #[arg(short = 'v', long, action = clap::ArgAction::Count)]
+    verbose: u8,
+
+    /// Suppress informational output (can be repeated: -q, -qq)
+    #[arg(short = 'q', long, action = clap::ArgAction::Count, conflicts_with = "verbose")]
+    quiet: u8,
 }
 
 fn main() {
     let cli = Cli::parse();
+
+    // Initialize logger: verbosity is (verbose count) - (quiet count)
+    let verbosity = cli.verbose as i8 - cli.quiet as i8;
+    appimagetool::log::init(verbosity);
 
     let config = appimagetool::config::Config::from_cli_args(
         cli.appdir,
@@ -78,12 +90,12 @@ fn main() {
         cli.tmpdir,
     )
     .unwrap_or_else(|e| {
-        eprintln!("error: {e}");
+        appimagetool::log_error!("{e}");
         std::process::exit(1);
     });
 
     if let Err(e) = appimagetool::appimage::build(&config) {
-        eprintln!("error: {e}");
+        appimagetool::log_error!("{e}");
         std::process::exit(1);
     }
 }

@@ -42,7 +42,7 @@ pub fn resolve_runtime(config: &Config) -> Result<PathBuf> {
         .unwrap_or(DEFAULT_URL_TEMPLATE)
         .replace("{arch}", &config.arch);
 
-    eprintln!("Downloading uruntime from {url}...");
+    crate::log_info!("Downloading uruntime from {url}...");
     util::download(&url, &cached)?;
     set_executable(&cached)?;
 
@@ -73,20 +73,20 @@ pub fn configure_runtime(
 
     // Write update info into .upd_info section
     if let Some(upinfo) = update_info {
-        eprintln!("Adding update information to runtime...");
+        crate::log_info!("Adding update information to runtime...");
         elf::write_section(&mut data, ".upd_info", upinfo.as_bytes())?;
     }
 
     // Write env vars into .envs section
     if !env_vars.is_empty() {
-        eprintln!("Adding environment variables to runtime...");
+        crate::log_info!("Adding environment variables to runtime...");
         let env_data: String = env_vars.join("\n");
         elf::write_section(&mut data, ".envs", env_data.as_bytes())?;
     }
 
     // Patch URUNTIME_MOUNT if keep_mount is set
     if keep_mount {
-        eprintln!("Setting runtime to keep mount point...");
+        crate::log_info!("Setting runtime to keep mount point...");
         elf::patch_section_string(
             &mut data,
             ".upd_info",

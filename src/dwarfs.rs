@@ -39,7 +39,7 @@ pub fn resolve_mkdwarfs(config: &Config) -> Result<PathBuf> {
         .as_deref()
         .unwrap_or(DEFAULT_DWARFS_URL_TEMPLATE)
         .replace("{arch}", &config.arch);
-    eprintln!("Downloading mkdwarfs from {url}...");
+    crate::log_info!("Downloading mkdwarfs from {url}...");
     util::download(&url, &cached)?;
     set_executable(&cached)?;
 
@@ -63,7 +63,7 @@ pub fn build_appimage(
     compression: &str,
     profile: Option<&Path>,
 ) -> Result<()> {
-    eprintln!("Building DWARFS AppImage...");
+    crate::log_info!("Building DWARFS AppImage...");
 
     let mut cmd = Command::new(mkdwarfs);
     cmd.arg("--force")
@@ -83,7 +83,7 @@ pub fn build_appimage(
     if let Some(profile) = profile
         && profile.exists()
     {
-        eprintln!("Using DWARFS profile {}...", profile.display());
+        crate::log_info!("Using DWARFS profile {}...", profile.display());
         cmd.arg("--categorize=hotness")
             .arg(format!("--hotness-list={}", profile.display()));
     }
@@ -119,7 +119,7 @@ pub fn build_profile_image(
     runtime: &Path,
     output: &Path,
 ) -> Result<()> {
-    eprintln!("Building temporary image for DWARFS profiling...");
+    crate::log_info!("Building temporary image for DWARFS profiling...");
 
     let status = Command::new(mkdwarfs)
         .arg("--force")
@@ -163,7 +163,7 @@ pub fn run_profiling(
 
     let tmp_profile = tmpdir.join("dwarfsprof.tmp");
 
-    eprintln!("Running DWARFS profiling for {timeout_secs}s...");
+    crate::log_info!("Running DWARFS profiling for {timeout_secs}s...");
 
     let mut child = Command::new("xvfb-run")
         .arg("-a")
@@ -196,9 +196,9 @@ pub fn run_profiling(
     if tmp_profile.exists() {
         std::fs::copy(&tmp_profile, profile_output)?;
         let _ = std::fs::remove_file(&tmp_profile);
-        eprintln!("DWARFS profile written to {}", profile_output.display());
+        crate::log_info!("DWARFS profile written to {}", profile_output.display());
     } else {
-        eprintln!("WARNING: DWARFS profile was not generated");
+        crate::log_warn!("DWARFS profile was not generated");
     }
 
     // Clean up temp appimage
