@@ -1,6 +1,8 @@
 use std::io::Write;
 use std::path::Path;
 
+use zsync_rs::ControlFile;
+
 use crate::config::Config;
 use crate::desktop::{self, DesktopEntry};
 use crate::dwarfs;
@@ -123,40 +125,18 @@ pub fn build(config: &Config) -> Result<()> {
     Ok(())
 }
 
-/// Generate a .zsync file using the zsyncmake binary.
-/// TODO: Replace with zsync-rs library in Phase 4.
+/// Generate a .zsync file using the zsync-rs library.
 fn generate_zsync(appimage: &Path, filename: &str, output_dir: &Path) -> Result<()> {
     eprintln!("Generating .zsync file...");
 
-    let status = std::process::Command::new("zsyncmake")
-        .arg("-u")
-        .arg(filename)
-        .arg(appimage)
-        .current_dir(output_dir)
-        .status();
+    let mut file = std::fs::File::open(appimage)?;
+    let control = ControlFile::generate(&mut file, filename, filename, None)?;
 
-    match status {
-        Ok(s) if s.success() => {}
-        Ok(s) => {
-            eprintln!(
-                "WARNING: zsyncmake failed (status {}), skipping .zsync generation",
-                s.code().unwrap_or(-1)
-            );
-            return Ok(());
-        }
-        Err(_) => {
-            eprintln!("WARNING: zsyncmake not found, skipping .zsync generation");
-            return Ok(());
-        }
-    }
+    let zsync_path = output_dir.join(format!("{filename}.zsync"));
+    let mut out = std::fs::File::create(&zsync_path)?;
+    control.write(&mut out)?;
 
-    // zsyncmake sometimes places the .zsync file in PWD instead of alongside the input
-    let zsync_in_pwd = std::path::PathBuf::from(format!("{filename}.zsync"));
-    let zsync_expected = output_dir.join(format!("{filename}.zsync"));
-    if zsync_in_pwd.exists() && !zsync_expected.exists() {
-        std::fs::rename(&zsync_in_pwd, &zsync_expected)?;
-    }
-
+    eprintln!("Wrote {}", zsync_path.display());
     Ok(())
 }
 

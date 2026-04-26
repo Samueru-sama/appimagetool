@@ -35,11 +35,29 @@ pub enum Error {
     #[error("mksquashfs failed: {0}")]
     SquashfsFailed(String),
 
+    #[error("zsync generation failed: {0}")]
+    ZsyncGenerate(String),
+
+    #[error("zsync write failed: {0}")]
+    ZsyncWrite(String),
+
     #[error("{0}")]
     Config(String),
 
     #[error(transparent)]
     Io(#[from] std::io::Error),
+}
+
+impl From<zsync_rs::GenerateError> for Error {
+    fn from(e: zsync_rs::GenerateError) -> Self {
+        Error::ZsyncGenerate(e.to_string())
+    }
+}
+
+impl From<zsync_rs::WriteError> for Error {
+    fn from(e: zsync_rs::WriteError) -> Self {
+        Error::ZsyncWrite(e.to_string())
+    }
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
