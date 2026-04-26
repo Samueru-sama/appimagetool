@@ -139,3 +139,119 @@ fn strip_epoch(version: &str) -> String {
         None => version.to_string(),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_strip_epoch() {
+        assert_eq!(strip_epoch("1:2.0.1"), "2.0.1");
+        assert_eq!(strip_epoch("2.0.1"), "2.0.1");
+        assert_eq!(strip_epoch("1:"), "");
+        assert_eq!(strip_epoch(""), "");
+        assert_eq!(strip_epoch("0:1.0.0-alpha"), "1.0.0-alpha");
+    }
+
+    #[test]
+    fn test_config_custom_compression() {
+        let config = Config::from_cli_args(
+            Some(PathBuf::from("/tmp/AppDir")),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            Some("zstd:level=1".to_string()),
+            false,
+            None,
+            None,
+            None,
+            None,
+        )
+        .unwrap();
+        assert_eq!(config.dwarfs_comp, "zstd:level=1");
+    }
+
+    #[test]
+    fn test_config_update_info_passthrough() {
+        let config = Config::from_cli_args(
+            Some(PathBuf::from("/tmp/AppDir")),
+            None,
+            None,
+            None,
+            None,
+            None,
+            Some("gh-releases-zsync|org|repo|latest|*.AppImage.zsync".to_string()),
+            None,
+            false,
+            None,
+            None,
+            None,
+            None,
+        )
+        .unwrap();
+        assert_eq!(
+            config.update_info.as_deref(),
+            Some("gh-releases-zsync|org|repo|latest|*.AppImage.zsync")
+        );
+    }
+
+    #[test]
+    fn test_config_output_name_override() {
+        let config = Config::from_cli_args(
+            Some(PathBuf::from("/tmp/AppDir")),
+            None,
+            Some("custom.AppImage".to_string()),
+            None,
+            None,
+            None,
+            None,
+            None,
+            false,
+            None,
+            None,
+            None,
+            None,
+        )
+        .unwrap();
+        assert_eq!(config.output_name.as_deref(), Some("custom.AppImage"));
+    }
+
+    #[test]
+    fn test_config_runtime_path() {
+        let config = Config::from_cli_args(
+            Some(PathBuf::from("/tmp/AppDir")),
+            None,
+            None,
+            None,
+            Some(PathBuf::from("/opt/uruntime")),
+            None,
+            None,
+            None,
+            false,
+            None,
+            None,
+            None,
+            None,
+        )
+        .unwrap();
+        assert_eq!(
+            config.runtime.as_deref(),
+            Some(std::path::Path::new("/opt/uruntime"))
+        );
+    }
+
+    #[test]
+    fn test_config_env_vars_from_string() {
+        let vars: Vec<String> = "FOO=bar\nBAZ=qux".lines().map(|l| l.to_string()).collect();
+        assert_eq!(vars, vec!["FOO=bar", "BAZ=qux"]);
+    }
+
+    #[test]
+    fn test_dirs_home_returns_something() {
+        let home = dirs_home();
+        assert!(!home.as_os_str().is_empty());
+    }
+}

@@ -69,3 +69,51 @@ pub fn is_elf(path: &Path) -> bool {
     let mut buf = [0u8; 4];
     f.read_exact(&mut buf).is_ok() && buf == *b"\x7fELF"
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_sanitize_filename_whitespace() {
+        assert_eq!(sanitize_filename("hello world"), "hello_world");
+    }
+
+    #[test]
+    fn test_sanitize_filename_colon() {
+        assert_eq!(sanitize_filename("app:name"), "app_name");
+    }
+
+    #[test]
+    fn test_sanitize_filename_dots_and_dashes() {
+        assert_eq!(sanitize_filename("my-app-1.0"), "my-app-1.0");
+    }
+
+    #[test]
+    fn test_sanitize_filename_trailing_underscores() {
+        assert_eq!(sanitize_filename("app***"), "app");
+    }
+
+    #[test]
+    fn test_sanitize_filename_all_special() {
+        assert_eq!(sanitize_filename("<>:\"|?*"), "");
+    }
+
+    #[test]
+    fn test_sanitize_filename_mixed() {
+        assert_eq!(
+            sanitize_filename("My App v2.0 (beta)"),
+            "My_App_v2.0_(beta)"
+        );
+    }
+
+    #[test]
+    fn test_sanitize_filename_newlines() {
+        assert_eq!(sanitize_filename("line1\nline2"), "line1_line2");
+    }
+
+    #[test]
+    fn test_sanitize_filename_empty() {
+        assert_eq!(sanitize_filename(""), "");
+    }
+}

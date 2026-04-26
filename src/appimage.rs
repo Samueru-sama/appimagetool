@@ -193,3 +193,132 @@ fn sort_env_file(appdir: &Path) -> Result<()> {
     std::fs::write(&env_path, sorted)?;
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_sort_env_file_basic() {
+        let tmp = std::env::temp_dir().join(format!(
+            "appimagetool-test-env-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let _ = std::fs::create_dir_all(&tmp);
+
+        let env_content = "unset BAZ\nexport FOO=bar\nunset QUX\nexport HELLO=world\n";
+        std::fs::write(tmp.join(".env"), env_content).unwrap();
+
+        sort_env_file(&tmp).unwrap();
+
+        let sorted = std::fs::read_to_string(tmp.join(".env")).unwrap();
+        let lines: Vec<&str> = sorted.lines().collect();
+
+        // All non-unset lines first, then all unset lines
+        let last_regular_idx = lines
+            .iter()
+            .enumerate()
+            .rev()
+            .find(|(_, l)| !l.starts_with("unset"))
+            .map(|(i, _)| i);
+        let first_unset_idx = lines
+            .iter()
+            .enumerate()
+            .find(|(_, l)| l.starts_with("unset"))
+            .map(|(i, _)| i);
+
+        if let (Some(last_reg), Some(first_unset)) = (last_regular_idx, first_unset_idx) {
+            assert!(
+                last_reg < first_unset,
+                "unset lines should come after regular lines"
+            );
+        }
+
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn test_sort_env_file_no_env_file() {
+        let tmp = std::env::temp_dir().join(format!(
+            "appimagetool-test-noenv-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let _ = std::fs::create_dir_all(&tmp);
+
+        // Should succeed even without .env
+        assert!(sort_env_file(&tmp).is_ok());
+
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn test_sort_env_file_all_unsets() {
+        let tmp = std::env::temp_dir().join(format!(
+            "appimagetool-test-allunset-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let _ = std::fs::create_dir_all(&tmp);
+
+        std::fs::write(tmp.join(".env"), "unset A\nunset B\n").unwrap();
+        sort_env_file(&tmp).unwrap();
+
+        let sorted = std::fs::read_to_string(tmp.join(".env")).unwrap();
+        assert!(sorted.lines().all(|l| l.starts_with("unset")));
+
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn test_write_appinfo() {
+        let tmp = std::env::temp_dir().join(format!(
+            "appimagetool-test-appinfo-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let _ = std::fs::create_dir_all(&tmp);
+
+        write_appinfo(&tmp, "TestApp", "1.0.0", "x86_64").unwrap();
+
+        let content = std::fs::read_to_string(tmp.join("appinfo")).unwrap();
+        assert!(content.contains("X-AppImage-Name=TestApp"));
+        assert!(content.contains("X-AppImage-Version=1.0.0"));
+        assert!(content.contains("X-AppImage-Arch=x86_64"));
+
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn test_write_appinfo_overwrite() {
+        let tmp = std::env::temp_dir().join(format!(
+            "appimagetool-test-appinfo2-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let _ = std::fs::create_dir_all(&tmp);
+
+        write_appinfo(&tmp, "Old", "0.1", "x86_64").unwrap();
+        write_appinfo(&tmp, "New", "2.0", "aarch64").unwrap();
+
+        let content = std::fs::read_to_string(tmp.join("appinfo")).unwrap();
+        assert!(content.contains("X-AppImage-Name=New"));
+        assert!(content.contains("X-AppImage-Version=2.0"));
+        assert!(content.contains("X-AppImage-Arch=aarch64"));
+        assert!(!content.contains("Old"));
+        assert!(!content.contains("0.1"));
+
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+}

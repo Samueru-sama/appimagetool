@@ -130,3 +130,111 @@ fn parse_key(content: &str, key: &str) -> Option<String> {
     }
     None
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_parse_key_basic() {
+        let content = "[Desktop Entry]\nName=MyApp\nExec=myapp\nIcon=myapp\n";
+        assert_eq!(parse_key(content, "Name"), Some("MyApp".to_string()));
+        assert_eq!(parse_key(content, "Exec"), Some("myapp".to_string()));
+        assert_eq!(parse_key(content, "Icon"), Some("myapp".to_string()));
+        assert_eq!(parse_key(content, "Comment"), None);
+    }
+
+    #[test]
+    fn test_parse_key_with_spaces() {
+        let content = "Name=My App\nExec=/usr/bin/my app\n";
+        assert_eq!(parse_key(content, "Name"), Some("My".to_string()));
+        assert_eq!(parse_key(content, "Exec"), Some("/usr/bin/my".to_string()));
+    }
+
+    #[test]
+    fn test_parse_key_quoted() {
+        let content = "Exec=\"myapp\"\n";
+        assert_eq!(parse_key(content, "Exec"), Some("myapp".to_string()));
+    }
+
+    #[test]
+    fn test_parse_key_empty_value() {
+        let content = "Name=\n";
+        assert_eq!(parse_key(content, "Name"), Some("".to_string()));
+    }
+
+    #[test]
+    fn test_parse_key_no_match() {
+        let content = "Name=Test\n";
+        assert_eq!(parse_key(content, "Version"), None);
+    }
+
+    #[test]
+    fn test_main_binary_simple() {
+        let de = DesktopEntry {
+            path: PathBuf::from("/tmp/test.desktop"),
+            name: "Test".to_string(),
+            exec: "myapp".to_string(),
+            icon_name: None,
+        };
+        assert_eq!(de.main_binary(), Some("myapp"));
+    }
+
+    #[test]
+    fn test_main_binary_with_args() {
+        let de = DesktopEntry {
+            path: PathBuf::from("/tmp/test.desktop"),
+            name: "Test".to_string(),
+            exec: "myapp --flag value".to_string(),
+            icon_name: None,
+        };
+        assert_eq!(de.main_binary(), Some("myapp"));
+    }
+
+    #[test]
+    fn test_main_binary_with_path() {
+        let de = DesktopEntry {
+            path: PathBuf::from("/tmp/test.desktop"),
+            name: "Test".to_string(),
+            exec: "/usr/bin/myapp".to_string(),
+            icon_name: None,
+        };
+        assert_eq!(de.main_binary(), Some("myapp"));
+    }
+
+    #[test]
+    fn test_main_binary_quoted_path() {
+        let de = DesktopEntry {
+            path: PathBuf::from("/tmp/test.desktop"),
+            name: "Test".to_string(),
+            exec: "\"/opt/myapp\"".to_string(),
+            icon_name: None,
+        };
+        assert_eq!(de.main_binary(), Some("myapp"));
+    }
+
+    #[test]
+    fn test_compute_output_name_basic() {
+        let name = compute_output_name("MyApp", Some("1.0"), "x86_64");
+        assert_eq!(name, "MyApp-1.0-anylinux-x86_64.AppImage");
+    }
+
+    #[test]
+    fn test_compute_output_name_empty_version() {
+        let name = compute_output_name("MyApp", Some(""), "x86_64");
+        // Empty version is treated like None
+        assert_eq!(name, "MyApp-anylinux-x86_64.AppImage");
+    }
+
+    #[test]
+    fn test_compute_output_name_no_version() {
+        let name = compute_output_name("MyApp", None, "aarch64");
+        assert_eq!(name, "MyApp-anylinux-aarch64.AppImage");
+    }
+
+    #[test]
+    fn test_compute_output_name_sanitizes_version() {
+        let name = compute_output_name("MyApp", Some("1.0:beta"), "x86_64");
+        assert_eq!(name, "MyApp-1.0_beta-anylinux-x86_64.AppImage");
+    }
+}
