@@ -1,3 +1,4 @@
+pub mod appimage;
 pub mod config;
 pub mod desktop;
 pub mod dwarfs;
