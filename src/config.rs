@@ -41,21 +41,17 @@ impl Config {
         mkdwarfs: Option<PathBuf>,
         tmpdir: Option<PathBuf>,
     ) -> crate::error::Result<Self> {
-        let arch = arch
-            .or_else(|| env_opt("ARCH"))
-            .unwrap_or_else(|| match env::consts::ARCH {
-                "x86_64" => "x86_64".to_string(),
-                "aarch64" => "aarch64".to_string(),
-                other => other.to_string(),
-            });
+        // Env vars with clap `env =` are already resolved by the CLI.
+        // These .or_else() calls handle the library case (no clap).
 
-        let appdir = appdir
-            .or_else(|| env_opt("APPDIR").map(PathBuf::from))
-            .unwrap_or_else(|| PathBuf::from("./AppDir"));
+        let arch = arch.unwrap_or_else(|| match env::consts::ARCH {
+            "x86_64" => "x86_64".to_string(),
+            "aarch64" => "aarch64".to_string(),
+            other => other.to_string(),
+        });
 
-        let tmpdir = tmpdir
-            .or_else(|| env_opt("TMPDIR").map(PathBuf::from))
-            .unwrap_or_else(|| PathBuf::from("/tmp"));
+        let appdir = appdir.unwrap_or_else(|| PathBuf::from("./AppDir"));
+        let tmpdir = tmpdir.unwrap_or_else(|| PathBuf::from("/tmp"));
 
         let optimize_launch = optimize_launch || env_opt("OPTIMIZE_LAUNCH").as_deref() == Some("1");
 
@@ -90,20 +86,14 @@ impl Config {
                 }
             });
 
-        let dwarfs_comp = dwarfs_comp
-            .or_else(|| env_opt("DWARFS_COMP"))
-            .unwrap_or_else(|| "zstd:level=22 -S26 -B6".to_string());
-
-        let runtime_url = runtime_url.or_else(|| env_opt("URUNTIME_LINK"));
+        let dwarfs_comp = dwarfs_comp.unwrap_or_else(|| "zstd:level=22 -S26 -B6".to_string());
 
         Ok(Config {
-            appdir,
-            output_dir: output
-                .or_else(|| env_opt("OUTPATH").map(PathBuf::from))
-                .unwrap_or_else(|| PathBuf::from(".")),
-            output_name: output_name.or_else(|| env_opt("OUTNAME")),
+            appdir: appdir.clone(),
+            output_dir: output.unwrap_or_else(|| PathBuf::from(".")),
+            output_name,
             arch,
-            runtime: runtime.or_else(|| env_opt("RUNTIME").map(PathBuf::from)),
+            runtime,
             runtime_url,
             dwarfs_comp,
             update_info,
@@ -120,7 +110,7 @@ impl Config {
                     None
                 }
             }),
-            mkdwarfs: mkdwarfs.or_else(|| env_opt("DWARFS_CMD").map(PathBuf::from)),
+            mkdwarfs,
             tmpdir,
             keep_mount,
             devel_release,
