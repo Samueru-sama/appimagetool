@@ -30,10 +30,6 @@ struct Cli {
     #[arg(long, env = "URUNTIME_LINK")]
     runtime_url: Option<String>,
 
-    /// Filesystem compression type: dwarfs, squashfs
-    #[arg(short, long, env = "COMPRESSION", default_value = "dwarfs")]
-    compression: Option<String>,
-
     /// Update information string
     #[arg(short, long, env = "UPINFO")]
     update_info: Option<String>,
@@ -69,7 +65,6 @@ fn main() {
         cli.arch,
         cli.runtime,
         cli.runtime_url,
-        cli.compression,
         cli.update_info,
         cli.dwarfs_comp,
         cli.optimize_launch,

@@ -13,7 +13,6 @@ pub struct Config {
     pub arch: String,
     pub runtime: Option<PathBuf>,
     pub runtime_url: Option<String>,
-    pub compression: Compression,
     pub dwarfs_comp: String,
     pub update_info: Option<String>,
     pub env_vars: Vec<String>,
@@ -26,12 +25,6 @@ pub struct Config {
     pub devel_release: bool,
 }
 
-#[derive(Debug, Clone, PartialEq)]
-pub enum Compression {
-    Dwarfs,
-    Squashfs,
-}
-
 impl Config {
     #[allow(clippy::too_many_arguments)]
     pub fn from_cli_args(
@@ -41,7 +34,6 @@ impl Config {
         arch: Option<String>,
         runtime: Option<PathBuf>,
         runtime_url: Option<String>,
-        compression: Option<String>,
         update_info: Option<String>,
         dwarfs_comp: Option<String>,
         optimize_launch: bool,
@@ -60,20 +52,6 @@ impl Config {
         let appdir = appdir
             .or_else(|| env_opt("APPDIR").map(PathBuf::from))
             .unwrap_or_else(|| PathBuf::from("./AppDir"));
-
-        let compression_str = compression
-            .or_else(|| env_opt("COMPRESSION"))
-            .unwrap_or_else(|| "dwarfs".to_string());
-
-        let compression = match compression_str.as_str() {
-            "dwarfs" => Compression::Dwarfs,
-            "squashfs" => Compression::Squashfs,
-            other => {
-                return Err(crate::error::Error::Config(format!(
-                    "unknown compression type: {other}"
-                )));
-            }
-        };
 
         let tmpdir = tmpdir
             .or_else(|| env_opt("TMPDIR").map(PathBuf::from))
@@ -127,7 +105,6 @@ impl Config {
             arch,
             runtime: runtime.or_else(|| env_opt("RUNTIME").map(PathBuf::from)),
             runtime_url,
-            compression,
             dwarfs_comp,
             update_info,
             env_vars,

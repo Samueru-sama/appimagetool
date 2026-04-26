@@ -1,7 +1,7 @@
 use std::io::Write;
 use std::path::Path;
 
-use crate::config::{Compression, Config};
+use crate::config::Config;
 use crate::desktop::{self, DesktopEntry};
 use crate::dwarfs;
 use crate::error::Result;
@@ -85,23 +85,14 @@ pub fn build(config: &Config) -> Result<()> {
     };
 
     // Build the final AppImage
-    match config.compression {
-        Compression::Dwarfs => {
-            dwarfs::build_appimage(
-                &mkdwarfs,
-                &config.appdir,
-                &runtime_path,
-                &output_path,
-                &config.dwarfs_comp,
-                profile.as_deref(),
-            )?;
-        }
-        Compression::Squashfs => {
-            return Err(crate::error::Error::Config(
-                "SquashFS support is not yet implemented".to_string(),
-            ));
-        }
-    }
+    dwarfs::build_appimage(
+        &mkdwarfs,
+        &config.appdir,
+        &runtime_path,
+        &output_path,
+        &config.dwarfs_comp,
+        profile.as_deref(),
+    )?;
 
     // Make output executable
     use std::os::unix::fs::PermissionsExt;
