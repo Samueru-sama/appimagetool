@@ -36,20 +36,18 @@ fn try_download(url: &str, dest: &Path) -> Result<()> {
 }
 
 /// Sanitize a string for use as a filename.
-/// Replaces characters that are problematic in filenames with underscores.
+/// Replaces characters that are problematic in filenames — including path
+/// separators and NUL — with underscores. The desktop entry's `Name=` field
+/// flows into output paths, so this also defends against path traversal.
 pub fn sanitize_filename(s: &str) -> String {
     s.chars()
         .map(|c| {
             if c.is_whitespace()
-                || c == '"'
-                || c == ':'
-                || c == '>'
-                || c == '<'
-                || c == '*'
-                || c == '|'
-                || c == '?'
-                || c == '\r'
-                || c == '\n'
+                || c.is_control()
+                || matches!(
+                    c,
+                    '"' | ':' | '>' | '<' | '*' | '|' | '?' | '/' | '\\' | '\0'
+                )
             {
                 '_'
             } else {
@@ -115,5 +113,19 @@ mod tests {
     #[test]
     fn test_sanitize_filename_empty() {
         assert_eq!(sanitize_filename(""), "");
+    }
+
+    #[test]
+    fn test_sanitize_filename_path_separators() {
+        // Path traversal must be neutralised on both unix and windows separators.
+        assert_eq!(sanitize_filename("../etc/passwd"), ".._etc_passwd");
+        assert_eq!(sanitize_filename(r"foo\bar"), "foo_bar");
+        assert_eq!(sanitize_filename("a/b/c"), "a_b_c");
+    }
+
+    #[test]
+    fn test_sanitize_filename_nul_and_control() {
+        assert_eq!(sanitize_filename("foo\0bar"), "foo_bar");
+        assert_eq!(sanitize_filename("foo\x07bar"), "foo_bar");
     }
 }
