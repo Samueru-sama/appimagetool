@@ -1,7 +1,7 @@
 use std::fs;
 use std::path::PathBuf;
 
-use appimagetool::config::Config;
+use appimagetool::config::{CliArgs, Config};
 use appimagetool::desktop::{self, DesktopEntry};
 
 /// Helper: create a temp dir that is automatically cleaned up.
@@ -181,21 +181,11 @@ fn test_config_defaults() {
     let appdir = tmp.path().join("AppDir");
     fs::create_dir_all(&appdir).unwrap();
 
-    let config = Config::from_cli_args(
-        Some(appdir),
-        None,
-        None,
-        None,
-        None,
-        None,
-        None,
-        None,
-        false,
-        None,
-        None,
-        None,
-        Some(tmp.path().to_path_buf()),
-    )
+    let config = Config::from_cli_args(CliArgs {
+        appdir: Some(appdir),
+        tmpdir: Some(tmp.path().to_path_buf()),
+        ..Default::default()
+    })
     .unwrap();
 
     assert!(config.appdir.ends_with("AppDir"));
@@ -211,21 +201,12 @@ fn test_config_defaults() {
 fn test_config_arch_detection() {
     let tmp = TempDir::new("appimagetool-test");
 
-    let config = Config::from_cli_args(
-        Some(tmp.path().join("AppDir")),
-        None,
-        None,
-        Some("aarch64".to_string()),
-        None,
-        None,
-        None,
-        None,
-        false,
-        None,
-        None,
-        None,
-        Some(tmp.path().to_path_buf()),
-    )
+    let config = Config::from_cli_args(CliArgs {
+        appdir: Some(tmp.path().join("AppDir")),
+        arch: Some("aarch64".to_string()),
+        tmpdir: Some(tmp.path().to_path_buf()),
+        ..Default::default()
+    })
     .unwrap();
 
     assert_eq!(config.arch, "aarch64");
@@ -332,21 +313,13 @@ fn test_full_build_pipeline() {
 
     create_mock_appdir(&appdir, "HelloWorld");
 
-    let config = Config::from_cli_args(
-        Some(appdir.clone()),
-        Some(output_dir.clone()),
-        None,
-        None,
-        None,
-        None,
-        None,
-        Some("zstd:level=1".to_string()), // fast compression for tests
-        false,
-        None,
-        None,
-        None,
-        Some(tmp.path().to_path_buf()),
-    )
+    let config = Config::from_cli_args(CliArgs {
+        appdir: Some(appdir.clone()),
+        output: Some(output_dir.clone()),
+        dwarfs_comp: Some("zstd:level=1".to_string()), // fast compression for tests
+        tmpdir: Some(tmp.path().to_path_buf()),
+        ..Default::default()
+    })
     .unwrap();
 
     appimagetool::appimage::build(&config).unwrap();

@@ -74,21 +74,21 @@ fn main() {
     let verbosity = cli.verbose as i8 - cli.quiet as i8;
     appimagetool::log::init(verbosity);
 
-    let config = appimagetool::config::Config::from_cli_args(
-        cli.appdir,
-        cli.output,
-        cli.name,
-        cli.arch,
-        cli.runtime,
-        cli.runtime_url,
-        cli.update_info,
-        cli.dwarfs_comp,
-        cli.optimize_launch,
-        cli.dwarfs_profile,
-        cli.mkdwarfs,
-        cli.dwarfs_url,
-        cli.tmpdir,
-    )
+    let config = appimagetool::config::Config::from_cli_args(appimagetool::config::CliArgs {
+        appdir: cli.appdir,
+        output: cli.output,
+        output_name: cli.name,
+        arch: cli.arch,
+        runtime: cli.runtime,
+        runtime_url: cli.runtime_url,
+        update_info: cli.update_info,
+        dwarfs_comp: cli.dwarfs_comp,
+        optimize_launch: cli.optimize_launch,
+        dwarfs_profile: cli.dwarfs_profile,
+        mkdwarfs: cli.mkdwarfs,
+        dwarfs_url: cli.dwarfs_url,
+        tmpdir: cli.tmpdir,
+    })
     .unwrap_or_else(|e| {
         appimagetool::log_error!("{e}");
         std::process::exit(1);
