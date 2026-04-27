@@ -5,6 +5,17 @@ use crate::elf;
 use crate::error::{Error, Result};
 use crate::util;
 
+/// Sections that may carry the URUNTIME_MOUNT marker, in priority order.
+const MOUNT_PATCH_SECTIONS: &[&str] = &[".upd_info", ".envs"];
+
+/// Existing marker values we know how to rewrite.
+const MOUNT_PATCH_PATTERNS: &[&str] = &[
+    "URUNTIME_MOUNT=3",
+    "URUNTIME_MOUNT=2",
+    "URUNTIME_MOUNT=1",
+    "URUNTIME_MOUNT=0",
+];
+
 /// Default uruntime download URL pattern.
 /// `{arch}` gets replaced with the target architecture.
 const DEFAULT_URL_TEMPLATE: &str = "https://github.com/VHSgunzo/uruntime/releases/latest/download/uruntime-appimage-dwarfs-lite-{arch}";
@@ -84,33 +95,37 @@ pub fn configure_runtime(
         elf::write_section(&mut data, ".envs", env_data.as_bytes())?;
     }
 
-    // Patch URUNTIME_MOUNT if keep_mount is set
     if keep_mount {
         crate::log_info!("Setting runtime to keep mount point...");
-        elf::patch_section_string(
-            &mut data,
-            ".upd_info",
-            "URUNTIME_MOUNT=3",
-            "URUNTIME_MOUNT=0",
-        )
-        .or_else(|_| {
-            elf::patch_section_string(&mut data, ".envs", "URUNTIME_MOUNT=3", "URUNTIME_MOUNT=0")
-        })
-        .or_else(|_| {
-            for old in [
-                "URUNTIME_MOUNT=0",
-                "URUNTIME_MOUNT=1",
-                "URUNTIME_MOUNT=2",
-                "URUNTIME_MOUNT=3",
-            ] {
-                let _ = elf::patch_section_string(&mut data, ".envs", old, "URUNTIME_MOUNT=0");
-            }
-            Ok::<(), Error>(())
-        })?;
+        patch_keep_mount(&mut data)?;
     }
 
     std::fs::write(runtime_path, data)?;
     Ok(())
+}
+
+/// Rewrite any `URUNTIME_MOUNT=<n>` marker found in the runtime's config sections
+/// to `URUNTIME_MOUNT=0` (keep-mount). Returns an error if no marker is found
+/// in any known section — silently leaving the runtime unmodified would mask a
+/// real runtime/version mismatch.
+fn patch_keep_mount(data: &mut [u8]) -> Result<()> {
+    for section in MOUNT_PATCH_SECTIONS {
+        // Skip sections the runtime doesn't carry.
+        if elf::find_section(data, section).is_none() {
+            continue;
+        }
+        for pattern in MOUNT_PATCH_PATTERNS {
+            if elf::patch_section_string(data, section, pattern, "URUNTIME_MOUNT=0")? {
+                return Ok(());
+            }
+        }
+    }
+    Err(Error::Config(
+        "could not patch URUNTIME_MOUNT: marker not found in .upd_info or .envs\n  \
+         hint: this runtime build may not support URUNTIME_PRELOAD; \
+         try a newer uruntime release"
+            .to_string(),
+    ))
 }
 
 fn set_executable(path: &Path) -> Result<()> {

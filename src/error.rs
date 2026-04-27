@@ -40,6 +40,13 @@ pub enum Error {
     SectionNotFound(String),
 
     #[error(
+        "Runtime is not a valid ELF binary or has corrupt section headers\n  \
+         hint: remove the cached runtime and let it re-download, \
+         or pass a known-good binary via --runtime"
+    )]
+    MalformedElf,
+
+    #[error(
         "Data too large for ELF section '{name}': {size} > {capacity} bytes\n  \
          hint: shorten the value or use a runtime with larger ELF sections"
     )]

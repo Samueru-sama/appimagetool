@@ -1,6 +1,6 @@
 use std::path::Path;
 
-use crate::error::Result;
+use crate::error::{Error, Result};
 
 /// Parsed ELF header info needed for section lookups.
 struct ElfInfo {
@@ -14,30 +14,27 @@ struct ElfInfo {
 
 impl ElfInfo {
     fn parse(data: &[u8]) -> Option<Self> {
-        if data.len() < 64 || &data[0..4] != b"\x7fELF" {
+        if data.get(0..4)? != b"\x7fELF" {
             return None;
         }
-        let is_64bit = data[4] == 2;
-        let is_le = data[5] == 1;
+        let is_64bit = *data.get(4)? == 2;
+        let is_le = *data.get(5)? == 1;
 
         let (sh_off, sh_entsize, sh_num, sh_strndx) = if is_64bit {
-            let sh_off = r64(data, 40, is_le);
-            let sh_entsize = r16(data, 58, is_le) as u64;
-            let sh_num = r16(data, 60, is_le) as u64;
-            let sh_strndx = r16(data, 62, is_le) as u64;
+            let sh_off = r64(data, 40, is_le)?;
+            let sh_entsize = r16(data, 58, is_le)? as u64;
+            let sh_num = r16(data, 60, is_le)? as u64;
+            let sh_strndx = r16(data, 62, is_le)? as u64;
             (sh_off, sh_entsize, sh_num, sh_strndx)
         } else {
-            if data.len() < 52 {
-                return None;
-            }
-            let sh_off = r32(data, 32, is_le) as u64;
-            let sh_entsize = r16(data, 46, is_le) as u64;
-            let sh_num = r16(data, 48, is_le) as u64;
-            let sh_strndx = r16(data, 50, is_le) as u64;
+            let sh_off = r32(data, 32, is_le)? as u64;
+            let sh_entsize = r16(data, 46, is_le)? as u64;
+            let sh_num = r16(data, 48, is_le)? as u64;
+            let sh_strndx = r16(data, 50, is_le)? as u64;
             (sh_off, sh_entsize, sh_num, sh_strndx)
         };
 
-        if sh_off == 0 || sh_entsize == 0 || sh_num == 0 {
+        if sh_off == 0 || sh_entsize == 0 || sh_num == 0 || sh_strndx >= sh_num {
             return None;
         }
         Some(ElfInfo {
@@ -50,36 +47,28 @@ impl ElfInfo {
         })
     }
 
+    /// Compute the byte offset of section header `i`, returning None on overflow.
+    fn shdr_offset(&self, i: u64) -> Option<usize> {
+        let off = self.sh_off.checked_add(i.checked_mul(self.sh_entsize)?)?;
+        usize::try_from(off).ok()
+    }
+
     /// Get the strtab (section name string table) bytes.
     fn strtab<'a>(&self, data: &'a [u8]) -> Option<&'a [u8]> {
-        let hdr_off = (self.sh_off + self.sh_strndx * self.sh_entsize) as usize;
-        let (off, size) = if self.is_64bit {
-            (
-                r64(data, hdr_off + 24, self.is_le) as usize,
-                r64(data, hdr_off + 32, self.is_le) as usize,
-            )
-        } else {
-            (
-                r32(data, hdr_off + 16, self.is_le) as usize,
-                r32(data, hdr_off + 20, self.is_le) as usize,
-            )
-        };
-        data.get(off..off + size)
+        let hdr_off = self.shdr_offset(self.sh_strndx)?;
+        let (off, size) = self.read_offset_size(data, hdr_off)?;
+        slice_range(data, off, size)
     }
 
     /// Find section header index whose name matches.
     fn find_section_idx(&self, data: &[u8], name: &[u8]) -> Option<u64> {
         let strtab = self.strtab(data)?;
         for i in 0..self.sh_num {
-            let hdr_off = (self.sh_off + i * self.sh_entsize) as usize;
-            let name_idx = r32(data, hdr_off, self.is_le) as usize;
-            let name_start = name_idx;
-            let name_end = strtab[name_start..]
-                .iter()
-                .position(|&b| b == 0)
-                .map(|p| name_start + p)
-                .unwrap_or(strtab.len());
-            if &strtab[name_start..name_end] == name {
+            let hdr_off = self.shdr_offset(i)?;
+            let name_idx = r32(data, hdr_off, self.is_le)? as usize;
+            let tail = strtab.get(name_idx..)?;
+            let end = tail.iter().position(|&b| b == 0).unwrap_or(tail.len());
+            if &tail[..end] == name {
                 return Some(i);
             }
         }
@@ -87,18 +76,21 @@ impl ElfInfo {
     }
 
     /// Get (offset, size) of a section by index.
-    fn section_offset_size(&self, data: &[u8], idx: u64) -> (usize, usize) {
-        let hdr_off = (self.sh_off + idx * self.sh_entsize) as usize;
+    fn section_offset_size(&self, data: &[u8], idx: u64) -> Option<(usize, usize)> {
+        let hdr_off = self.shdr_offset(idx)?;
+        self.read_offset_size(data, hdr_off)
+    }
+
+    /// Read sh_offset and sh_size from a section header at `hdr_off`.
+    fn read_offset_size(&self, data: &[u8], hdr_off: usize) -> Option<(usize, usize)> {
         if self.is_64bit {
-            (
-                r64(data, hdr_off + 24, self.is_le) as usize,
-                r64(data, hdr_off + 32, self.is_le) as usize,
-            )
+            let off = usize::try_from(r64(data, hdr_off.checked_add(24)?, self.is_le)?).ok()?;
+            let size = usize::try_from(r64(data, hdr_off.checked_add(32)?, self.is_le)?).ok()?;
+            Some((off, size))
         } else {
-            (
-                r32(data, hdr_off + 16, self.is_le) as usize,
-                r32(data, hdr_off + 20, self.is_le) as usize,
-            )
+            let off = r32(data, hdr_off.checked_add(16)?, self.is_le)? as usize;
+            let size = r32(data, hdr_off.checked_add(20)?, self.is_le)? as usize;
+            Some((off, size))
         }
     }
 }
@@ -107,39 +99,44 @@ impl ElfInfo {
 pub fn read_section<'a>(data: &'a [u8], name: &str) -> Option<&'a [u8]> {
     let info = ElfInfo::parse(data)?;
     let idx = info.find_section_idx(data, name.as_bytes())?;
-    let (off, size) = info.section_offset_size(data, idx);
-    data.get(off..off + size)
+    let (off, size) = info.section_offset_size(data, idx)?;
+    slice_range(data, off, size)
 }
 
 /// Find the offset and size of an ELF section by name.
 pub fn find_section(data: &[u8], name: &str) -> Option<(usize, usize)> {
     let info = ElfInfo::parse(data)?;
     let idx = info.find_section_idx(data, name.as_bytes())?;
-    Some(info.section_offset_size(data, idx))
+    info.section_offset_size(data, idx)
 }
 
 /// Write data into an ELF section by name. The data is null-padded to fill the section.
 pub fn write_section(data: &mut [u8], name: &str, value: &[u8]) -> Result<()> {
-    let info = ElfInfo::parse(data).ok_or_else(|| {
-        std::io::Error::new(std::io::ErrorKind::InvalidData, "not a valid ELF file")
-    })?;
+    let info = ElfInfo::parse(data).ok_or(Error::MalformedElf)?;
 
     let idx = info
         .find_section_idx(data, name.as_bytes())
-        .ok_or_else(|| crate::error::Error::SectionNotFound(name.to_string()))?;
+        .ok_or_else(|| Error::SectionNotFound(name.to_string()))?;
 
-    let (sec_offset, sec_size) = info.section_offset_size(data, idx);
+    let (sec_offset, sec_size) = info
+        .section_offset_size(data, idx)
+        .ok_or(Error::MalformedElf)?;
 
-    if value.len() > sec_size {
-        return Err(crate::error::Error::SectionOverflow {
+    let end = sec_offset
+        .checked_add(sec_size)
+        .ok_or(Error::MalformedElf)?;
+    let region = data.get_mut(sec_offset..end).ok_or(Error::MalformedElf)?;
+
+    if value.len() > region.len() {
+        return Err(Error::SectionOverflow {
             name: name.to_string(),
             size: value.len(),
-            capacity: sec_size,
+            capacity: region.len(),
         });
     }
 
-    data[sec_offset..sec_offset + sec_size].fill(0);
-    data[sec_offset..sec_offset + value.len()].copy_from_slice(value);
+    region.fill(0);
+    region[..value.len()].copy_from_slice(value);
     Ok(())
 }
 
@@ -152,64 +149,68 @@ pub fn write_section_file(path: &Path, name: &str, value: &[u8]) -> Result<()> {
 }
 
 /// Replace a string pattern inside an ELF section (for patching runtime config).
+/// Returns `Ok(true)` if the pattern was found and replaced, `Ok(false)` otherwise.
 pub fn patch_section_string(
     data: &mut [u8],
     section_name: &str,
     pattern: &str,
     replacement: &str,
-) -> Result<()> {
+) -> Result<bool> {
     let (offset, size) = find_section(data, section_name)
-        .ok_or_else(|| crate::error::Error::SectionNotFound(section_name.to_string()))?;
+        .ok_or_else(|| Error::SectionNotFound(section_name.to_string()))?;
 
-    let section = &data[offset..offset + size];
+    let end = offset.checked_add(size).ok_or(Error::MalformedElf)?;
+    let section = data.get(offset..end).ok_or(Error::MalformedElf)?;
     let section_str = String::from_utf8_lossy(section);
-    if let Some(pos) = section_str.find(pattern) {
-        let byte_pos = offset + pos;
-        let pat_len = pattern.len();
-        let rep_len = replacement.len().min(pat_len);
-        data[byte_pos..byte_pos + rep_len].copy_from_slice(&replacement.as_bytes()[..rep_len]);
-        if rep_len < pat_len {
-            data[byte_pos + rep_len..byte_pos + pat_len].fill(0);
-        }
+
+    let Some(pos) = section_str.find(pattern) else {
+        return Ok(false);
+    };
+
+    let byte_pos = offset.checked_add(pos).ok_or(Error::MalformedElf)?;
+    let pat_len = pattern.len();
+    let rep_len = replacement.len().min(pat_len);
+    let pat_end = byte_pos.checked_add(pat_len).ok_or(Error::MalformedElf)?;
+    let region = data.get_mut(byte_pos..pat_end).ok_or(Error::MalformedElf)?;
+    region[..rep_len].copy_from_slice(&replacement.as_bytes()[..rep_len]);
+    if rep_len < pat_len {
+        region[rep_len..].fill(0);
     }
-    Ok(())
+    Ok(true)
+}
+
+/// Helper: bounds-checked subslice with explicit length.
+fn slice_range(data: &[u8], off: usize, size: usize) -> Option<&[u8]> {
+    let end = off.checked_add(size)?;
+    data.get(off..end)
 }
 
 // Helpers for reading multi-byte values at a given offset.
-fn r16(data: &[u8], off: usize, le: bool) -> u16 {
-    let b = [data[off], data[off + 1]];
-    if le {
-        u16::from_le_bytes(b)
+fn r16(data: &[u8], off: usize, le: bool) -> Option<u16> {
+    let bytes: [u8; 2] = data.get(off..off.checked_add(2)?)?.try_into().ok()?;
+    Some(if le {
+        u16::from_le_bytes(bytes)
     } else {
-        u16::from_be_bytes(b)
-    }
+        u16::from_be_bytes(bytes)
+    })
 }
 
-fn r32(data: &[u8], off: usize, le: bool) -> u32 {
-    let b = [data[off], data[off + 1], data[off + 2], data[off + 3]];
-    if le {
-        u32::from_le_bytes(b)
+fn r32(data: &[u8], off: usize, le: bool) -> Option<u32> {
+    let bytes: [u8; 4] = data.get(off..off.checked_add(4)?)?.try_into().ok()?;
+    Some(if le {
+        u32::from_le_bytes(bytes)
     } else {
-        u32::from_be_bytes(b)
-    }
+        u32::from_be_bytes(bytes)
+    })
 }
 
-fn r64(data: &[u8], off: usize, le: bool) -> u64 {
-    let b = [
-        data[off],
-        data[off + 1],
-        data[off + 2],
-        data[off + 3],
-        data[off + 4],
-        data[off + 5],
-        data[off + 6],
-        data[off + 7],
-    ];
-    if le {
-        u64::from_le_bytes(b)
+fn r64(data: &[u8], off: usize, le: bool) -> Option<u64> {
+    let bytes: [u8; 8] = data.get(off..off.checked_add(8)?)?.try_into().ok()?;
+    Some(if le {
+        u64::from_le_bytes(bytes)
     } else {
-        u64::from_be_bytes(b)
-    }
+        u64::from_be_bytes(bytes)
+    })
 }
 
 #[cfg(test)]
@@ -246,10 +247,59 @@ mod tests {
     #[test]
     fn test_patch_section_string() {
         let mut elf = create_test_elf(b".cfg", b"MOUNT=3AAAAAAAAA");
-        patch_section_string(&mut elf, ".cfg", "MOUNT=3", "MOUNT=0").unwrap();
+        let patched = patch_section_string(&mut elf, ".cfg", "MOUNT=3", "MOUNT=0").unwrap();
+        assert!(patched, "patch should report success when pattern matches");
         let section = read_section(&elf, ".cfg").unwrap();
         let s = String::from_utf8_lossy(section);
         assert!(s.starts_with("MOUNT=0"));
+    }
+
+    #[test]
+    fn test_patch_section_string_no_match() {
+        let mut elf = create_test_elf(b".cfg", b"MOUNT=3AAAAAAAAA");
+        let patched = patch_section_string(&mut elf, ".cfg", "ABSENT=9", "ABSENT=0").unwrap();
+        assert!(!patched, "patch should report no-op when pattern is absent");
+    }
+
+    #[test]
+    fn test_parse_rejects_short_input() {
+        // Truncated header — must not panic, must reject.
+        assert!(read_section(b"", ".test").is_none());
+        assert!(read_section(b"\x7fELF", ".test").is_none());
+        assert!(read_section(&[0u8; 32], ".test").is_none());
+    }
+
+    #[test]
+    fn test_parse_rejects_garbled_section_offsets() {
+        // A header with sh_off pointing past EOF must not panic.
+        let mut elf = create_test_elf(b".test", b"data");
+        // Overwrite e_shoff with a huge value.
+        elf[40..48].copy_from_slice(&u64::MAX.to_le_bytes());
+        assert!(read_section(&elf, ".test").is_none());
+        assert!(write_section(&mut elf.clone(), ".test", b"x").is_err());
+    }
+
+    #[test]
+    fn test_parse_rejects_oversized_strndx() {
+        let mut elf = create_test_elf(b".test", b"data");
+        // sh_strndx >= sh_num must be rejected.
+        elf[62..64].copy_from_slice(&999u16.to_le_bytes());
+        assert!(read_section(&elf, ".test").is_none());
+    }
+
+    #[test]
+    fn test_random_garbage_does_not_panic() {
+        // A bytestream that starts with the ELF magic but is otherwise junk.
+        let mut elf = vec![0u8; 256];
+        elf[0..4].copy_from_slice(b"\x7fELF");
+        elf[4] = 2;
+        elf[5] = 1;
+        for byte in elf.iter_mut().skip(6) {
+            *byte = 0xff;
+        }
+        // Must not panic; either parses to None or returns None on lookup.
+        let _ = read_section(&elf, ".test");
+        let _ = find_section(&elf, ".test");
     }
 
     /// Create a minimal ELF64 LE binary with one custom section.
