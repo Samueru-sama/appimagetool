@@ -1,5 +1,7 @@
+use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::time::{Duration, Instant};
 
 use crate::config::Config;
 use crate::error::{Error, Result};
@@ -151,8 +153,25 @@ pub fn build_profile_image(
     Ok(())
 }
 
+/// Verify FUSE is usable in this environment. AppImage launch requires `/dev/fuse`
+/// to be present and accessible (commonly missing in minimal containers).
+pub fn check_fuse_available() -> Result<()> {
+    let dev_fuse = Path::new("/dev/fuse");
+    if !dev_fuse.exists() {
+        return Err(Error::Config(
+            "FUSE is not available: /dev/fuse is missing\n  \
+             hint: OPTIMIZE_LAUNCH launches the AppImage to record a profile, \
+             which requires FUSE. Load the `fuse` kernel module, or run the \
+             container with `--device /dev/fuse --cap-add SYS_ADMIN`."
+                .to_string(),
+        ));
+    }
+    Ok(())
+}
+
 /// Run DWARFS profiling: launch a temp AppImage under xvfb with DWARFS_ANALYSIS_FILE set,
-/// wait for a timeout, then kill the process group and unmount any FUSE mounts.
+/// wait for a timeout, then tear down the process tree and unmount only the FUSE
+/// mounts that we created.
 pub fn run_profiling(
     appimage: &Path,
     profile_output: &Path,
@@ -163,12 +182,17 @@ pub fn run_profiling(
 
     let tmp_profile = tmpdir.join("dwarfsprof.tmp");
 
+    // Snapshot pre-existing AppImage FUSE mounts so we don't disturb other
+    // running AppImages on the system when we clean up.
+    let pre_mounts = snapshot_appimage_mounts(tmpdir);
+
     crate::log_info!("Running DWARFS profiling for {timeout_secs}s...");
 
     let mut child = Command::new("xvfb-run")
         .arg("-a")
         .arg("--")
         .arg(appimage)
+        .env("TMPDIR", tmpdir)
         .env("DWARFS_ANALYSIS_FILE", &tmp_profile)
         // Create a new process group so we can kill the tree
         .process_group(0)
@@ -177,22 +201,19 @@ pub fn run_profiling(
 
     let pgid = child.id() as i32;
 
-    // Wait for the timeout
-    std::thread::sleep(std::time::Duration::from_secs(timeout_secs));
+    std::thread::sleep(Duration::from_secs(timeout_secs));
 
-    // Kill the entire process group
-    unsafe {
-        libc::kill(-pgid, libc::SIGTERM);
+    terminate_process_group(&mut child, pgid);
+
+    // Unmount only the mounts that appeared during this run.
+    let post_mounts = snapshot_appimage_mounts(tmpdir);
+    for mountpoint in post_mounts.difference(&pre_mounts) {
+        unmount(mountpoint);
     }
-    let _ = child.wait();
-
-    // Unmount any FUSE mounts under tmpdir
-    unmount_fuse(tmpdir);
 
     // Give the profile writer a moment to finalize
-    std::thread::sleep(std::time::Duration::from_secs(2));
+    std::thread::sleep(Duration::from_secs(2));
 
-    // Copy to final location (avoiding race with any remaining writer)
     if tmp_profile.exists() {
         std::fs::copy(&tmp_profile, profile_output)?;
         let _ = std::fs::remove_file(&tmp_profile);
@@ -201,25 +222,79 @@ pub fn run_profiling(
         crate::log_warn!("DWARFS profile was not generated");
     }
 
-    // Clean up temp appimage
     let _ = std::fs::remove_file(appimage);
 
     Ok(())
 }
 
-/// Unmount FUSE mounts under the given directory.
-fn unmount_fuse(dir: &Path) {
-    let Ok(entries) = std::fs::read_dir(dir) else {
+/// Send SIGTERM to the process group, wait briefly for graceful exit, then
+/// escalate to SIGKILL if the tree refuses to die. Always returns; never blocks
+/// indefinitely on a stuck child.
+fn terminate_process_group(child: &mut std::process::Child, pgid: i32) {
+    unsafe {
+        libc::kill(-pgid, libc::SIGTERM);
+    }
+    if wait_with_timeout(child, Duration::from_secs(3)) {
         return;
-    };
-    for entry in entries.flatten() {
-        let name = entry.file_name();
-        let name = name.to_string_lossy();
-        if name.starts_with(".mount_") {
-            let mountpoint = dir.join(&*name);
-            let _ = Command::new("umount").arg(&mountpoint).status();
+    }
+
+    crate::log_warn!("process did not respond to SIGTERM, sending SIGKILL");
+    unsafe {
+        libc::kill(-pgid, libc::SIGKILL);
+    }
+    if !wait_with_timeout(child, Duration::from_secs(2)) {
+        crate::log_warn!("process did not exit after SIGKILL; continuing anyway");
+    }
+}
+
+/// Poll `try_wait` until the child exits or the timeout elapses. Returns true
+/// if the child exited.
+fn wait_with_timeout(child: &mut std::process::Child, timeout: Duration) -> bool {
+    let start = Instant::now();
+    while start.elapsed() < timeout {
+        match child.try_wait() {
+            Ok(Some(_)) => return true,
+            Ok(None) => std::thread::sleep(Duration::from_millis(50)),
+            Err(_) => return true,
         }
     }
+    false
+}
+
+/// Collect the set of AppImage FUSE mountpoints (`.mount_*`) currently present
+/// in `dir`. Used to diff before/after a profiling run so we only unmount what
+/// we caused.
+fn snapshot_appimage_mounts(dir: &Path) -> HashSet<PathBuf> {
+    let mut set = HashSet::new();
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return set;
+    };
+    for entry in entries.flatten() {
+        if entry.file_name().to_string_lossy().starts_with(".mount_") {
+            set.insert(entry.path());
+        }
+    }
+    set
+}
+
+/// Best-effort unmount: try `fusermount -u`, fall back to `umount`, finally
+/// `umount -l` (lazy) so a busy mount doesn't block cleanup.
+fn unmount(mountpoint: &Path) {
+    let try_cmd = |program: &str, args: &[&str]| -> bool {
+        Command::new(program)
+            .args(args)
+            .arg(mountpoint)
+            .status()
+            .map(|s| s.success())
+            .unwrap_or(false)
+    };
+    if try_cmd("fusermount", &["-u"]) {
+        return;
+    }
+    if try_cmd("umount", &[]) {
+        return;
+    }
+    let _ = try_cmd("umount", &["-l"]);
 }
 
 fn set_executable(path: &Path) -> Result<()> {
