@@ -247,16 +247,21 @@ fn wait_with_timeout(child: &mut std::process::Child, timeout: Duration) -> bool
     false
 }
 
-/// Collect the set of AppImage FUSE mountpoints (`.mount_*`) currently present
-/// in `dir`. Used to diff before/after a profiling run so we only unmount what
-/// we caused.
+/// Collect the set of AppImage FUSE mountpoint *directories* (`.mount_*`)
+/// currently present in `dir`. The runtime also drops a `.mount_<rand>.pid`
+/// sidecar file next to each mount; we deliberately skip it so we don't
+/// later call `umount` on a regular file.
 fn snapshot_appimage_mounts(dir: &Path) -> HashSet<PathBuf> {
     let mut set = HashSet::new();
     let Ok(entries) = std::fs::read_dir(dir) else {
         return set;
     };
     for entry in entries.flatten() {
-        if entry.file_name().to_string_lossy().starts_with(".mount_") {
+        if !entry.file_name().to_string_lossy().starts_with(".mount_") {
+            continue;
+        }
+        // Only directories are real mountpoints; .pid sidecars are regular files.
+        if entry.file_type().map(|t| t.is_dir()).unwrap_or(false) {
             set.insert(entry.path());
         }
     }
