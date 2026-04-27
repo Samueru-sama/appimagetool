@@ -39,7 +39,7 @@ struct Cli {
     dwarfs_comp: Option<String>,
 
     /// Enable DWARFS profile optimization
-    #[arg(long, env = "OPTIMIZE_LAUNCH", default_value = "false")]
+    #[arg(long)]
     optimize_launch: bool,
 
     /// Path to DWARFS profile

@@ -5,6 +5,13 @@ fn env_opt(name: &str) -> Option<String> {
     env::var(name).ok()
 }
 
+fn env_truthy(name: &str) -> bool {
+    matches!(
+        env_opt(name).as_deref().map(str::trim),
+        Some("1" | "true" | "TRUE" | "True" | "yes" | "YES" | "Yes" | "on" | "ON" | "On")
+    )
+}
+
 #[derive(Debug)]
 pub struct Config {
     pub appdir: PathBuf,
@@ -55,10 +62,10 @@ impl Config {
         let appdir = appdir.unwrap_or_else(|| PathBuf::from("./AppDir"));
         let tmpdir = tmpdir.unwrap_or_else(|| PathBuf::from("/tmp"));
 
-        let optimize_launch = optimize_launch || env_opt("OPTIMIZE_LAUNCH").as_deref() == Some("1");
+        let optimize_launch = optimize_launch || env_truthy("OPTIMIZE_LAUNCH");
 
-        let keep_mount = env_opt("URUNTIME_PRELOAD").as_deref() == Some("1");
-        let devel_release = env_opt("DEVEL_RELEASE").as_deref() == Some("1");
+        let keep_mount = env_truthy("URUNTIME_PRELOAD");
+        let devel_release = env_truthy("DEVEL_RELEASE");
 
         let update_info = update_info.or_else(|| env_opt("UPINFO")).or_else(|| {
             env::var("GITHUB_REPOSITORY").ok().map(|repo| {
