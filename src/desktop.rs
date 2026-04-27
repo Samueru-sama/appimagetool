@@ -1,3 +1,5 @@
+//! Parse and edit `.desktop` entry files inside an AppDir.
+
 use std::path::{Path, PathBuf};
 
 use crate::error::{Error, Result};
@@ -5,9 +7,13 @@ use crate::util;
 
 /// Parsed metadata from a .desktop file.
 pub struct DesktopEntry {
+    /// Path on disk to the parsed `.desktop` file.
     pub path: PathBuf,
+    /// `Name=` value (preserves whitespace).
     pub name: String,
+    /// `Exec=` value (preserves whitespace).
     pub exec: String,
+    /// `Icon=` value, if present.
     pub icon_name: Option<String>,
 }
 

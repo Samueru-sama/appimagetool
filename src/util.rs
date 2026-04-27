@@ -1,3 +1,6 @@
+//! Shared helpers: HTTP downloads with retry + atomic rename, filename
+//! sanitization, ELF magic detection, and per-process tmp paths.
+
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 

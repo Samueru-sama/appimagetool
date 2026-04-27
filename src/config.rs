@@ -1,3 +1,5 @@
+//! Resolved build configuration plus the [`CliArgs`] input that produces it.
+
 use std::env;
 use std::path::PathBuf;
 
@@ -12,24 +14,44 @@ fn env_truthy(name: &str) -> bool {
     )
 }
 
+/// Fully resolved build configuration, produced by [`Config::from_cli_args`].
+/// CLI flags, env-var fallbacks, and built-in defaults are all merged here, so
+/// downstream code can treat this struct as authoritative.
 #[derive(Debug)]
 pub struct Config {
+    /// Directory holding the AppDir contents.
     pub appdir: PathBuf,
+    /// Directory the final `.AppImage` (and zsync) will be written to.
     pub output_dir: PathBuf,
+    /// Override for the output filename; otherwise derived from desktop entry.
     pub output_name: Option<String>,
+    /// Target architecture string (e.g. `x86_64`, `aarch64`).
     pub arch: String,
+    /// Explicit uruntime binary to embed; resolved/downloaded if `None`.
     pub runtime: Option<PathBuf>,
+    /// Override URL for downloading the uruntime.
     pub runtime_url: Option<String>,
+    /// Compression options passed to `mkdwarfs`.
     pub dwarfs_comp: String,
+    /// `upd_info` ELF section payload (zsync URL or similar).
     pub update_info: Option<String>,
+    /// Permanent env-var lines to bake into the runtime's `.envs` section.
     pub env_vars: Vec<String>,
+    /// Existing DWARFS profile to seed the build with.
     pub dwarfs_profile: Option<PathBuf>,
+    /// If true, run a profiling pass before the final build.
     pub optimize_launch: bool,
+    /// Resolved package version, if discovered from `VERSION` or `~/version`.
     pub version: Option<String>,
+    /// Override `mkdwarfs` binary path; resolved from PATH/cache otherwise.
     pub mkdwarfs: Option<PathBuf>,
+    /// Override URL for downloading `mkdwarfs`.
     pub dwarfs_url: Option<String>,
+    /// Temp directory used for caches, working copies, and FUSE mounts.
     pub tmpdir: PathBuf,
+    /// Patch the runtime to keep the FUSE mount alive after exit.
     pub keep_mount: bool,
+    /// Tag the build as a nightly/devel release (rewrites desktop name + zsync).
     pub devel_release: bool,
 }
 
@@ -39,22 +61,36 @@ pub struct Config {
 /// final `Config` still applies all env-var fallbacks and defaults.
 #[derive(Debug, Default, Clone)]
 pub struct CliArgs {
+    /// AppDir path; defaults to `./AppDir`.
     pub appdir: Option<PathBuf>,
+    /// Output directory; defaults to `.`.
     pub output: Option<PathBuf>,
+    /// Override for the output filename.
     pub output_name: Option<String>,
+    /// Target architecture; defaults to host arch.
     pub arch: Option<String>,
+    /// Path to a pre-supplied uruntime binary.
     pub runtime: Option<PathBuf>,
+    /// URL for downloading the uruntime.
     pub runtime_url: Option<String>,
+    /// `upd_info` payload override (e.g. a zsync URL).
     pub update_info: Option<String>,
+    /// `mkdwarfs` compression option string.
     pub dwarfs_comp: Option<String>,
+    /// Enable the DWARFS profiling pass.
     pub optimize_launch: bool,
+    /// Path to an existing DWARFS profile to feed into the build.
     pub dwarfs_profile: Option<PathBuf>,
+    /// Path to a pre-supplied `mkdwarfs` binary.
     pub mkdwarfs: Option<PathBuf>,
+    /// URL for downloading `mkdwarfs`.
     pub dwarfs_url: Option<String>,
+    /// Override TMPDIR.
     pub tmpdir: Option<PathBuf>,
 }
 
 impl Config {
+    /// Resolve a fully-defaulted [`Config`] from CLI inputs and env vars.
     pub fn from_cli_args(args: CliArgs) -> crate::error::Result<Self> {
         // Env vars with clap `env =` are already resolved by the CLI.
         // The .or_else() calls below handle the library case (no clap).

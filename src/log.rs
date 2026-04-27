@@ -1,3 +1,8 @@
+//! Verbosity-gated stderr logger driven by a single global level. Use the
+//! [`log_debug`], [`log_info`], [`log_warn`], and [`log_error`] macros from
+//! the crate root rather than calling [`debug`]/[`info`]/[`warn`]/[`error`]
+//! directly when you want lazy formatting.
+
 use std::sync::atomic::{AtomicI8, Ordering};
 
 /// Verbosity levels for the logger.
@@ -45,7 +50,7 @@ pub fn error(msg: &str) {
     eprintln!("error: {msg}");
 }
 
-/// Format args into a string for logging (avoids allocating in non-verbose mode).
+/// Format args and emit at debug level (only shown with `--verbose`).
 #[macro_export]
 macro_rules! log_debug {
     ($($arg:tt)*) => {
@@ -53,6 +58,7 @@ macro_rules! log_debug {
     };
 }
 
+/// Format args and emit at info level (default; suppressed with `--quiet`).
 #[macro_export]
 macro_rules! log_info {
     ($($arg:tt)*) => {
@@ -60,6 +66,7 @@ macro_rules! log_info {
     };
 }
 
+/// Format args and emit at warn level (suppressed with `-qq`).
 #[macro_export]
 macro_rules! log_warn {
     ($($arg:tt)*) => {
@@ -67,6 +74,7 @@ macro_rules! log_warn {
     };
 }
 
+/// Format args and emit at error level (always shown).
 #[macro_export]
 macro_rules! log_error {
     ($($arg:tt)*) => {

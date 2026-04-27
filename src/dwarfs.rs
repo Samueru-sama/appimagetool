@@ -1,3 +1,6 @@
+//! Build DWARFS filesystem images and run the optional profiling pass that
+//! feeds `--categorize=hotness` into the final image.
+
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::process::Command;

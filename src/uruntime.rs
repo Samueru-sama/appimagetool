@@ -1,3 +1,6 @@
+//! Resolve the uruntime binary (cache or download) and patch its ELF sections
+//! to carry the build's `upd_info`, env vars, and mount-mode marker.
+
 use std::path::{Path, PathBuf};
 
 use crate::config::Config;

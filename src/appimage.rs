@@ -1,3 +1,7 @@
+//! Top-level AppImage build pipeline: validate the AppDir, resolve runtime
+//! and `mkdwarfs`, optionally run the DWARFS profiling pass, and emit the
+//! final `.AppImage` plus optional `.zsync` and `appinfo`.
+
 use std::io::Write;
 use std::path::Path;
 

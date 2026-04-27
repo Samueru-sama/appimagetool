@@ -1,3 +1,7 @@
+//! Minimal, panic-resistant ELF section reader/writer used to inspect and
+//! patch the embedded uruntime. Only handles ET_EXEC/ET_DYN section headers
+//! — enough to find named sections and rewrite their contents in place.
+
 use std::path::Path;
 
 use crate::error::{Error, Result};
