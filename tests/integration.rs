@@ -245,43 +245,6 @@ fn test_is_elf() {
     assert!(!util::is_elf(&tmp.path().join("no_such_file")));
 }
 
-// ─── Env file sorting (integration) ──────────────────────────────────
-
-#[test]
-fn test_env_file_sorting() {
-    let tmp = TempDir::new("appimagetool-test");
-    let appdir = tmp.path().join("AppDir");
-    fs::create_dir_all(&appdir).unwrap();
-
-    // Write .env with mixed order
-    fs::write(
-        appdir.join(".env"),
-        "export FOO=bar\nunset BAZ\nexport QUX=1\nunset ZAP\n",
-    )
-    .unwrap();
-
-    // Call the sort function indirectly via the build module
-    // We test the logic directly here since sort_env_file is private
-    let env_path = appdir.join(".env");
-    let content = fs::read_to_string(&env_path).unwrap();
-    let mut regular = Vec::new();
-    let mut unsets = Vec::new();
-    for line in content.lines() {
-        if line.starts_with("unset") {
-            unsets.push(line);
-        } else {
-            regular.push(line);
-        }
-    }
-
-    // Verify all unsets come after regular lines
-    let all: Vec<&str> = regular.iter().chain(unsets.iter()).copied().collect();
-    assert_eq!(all[0], "export FOO=bar");
-    assert_eq!(all[1], "export QUX=1");
-    assert_eq!(all[2], "unset BAZ");
-    assert_eq!(all[3], "unset ZAP");
-}
-
 // ─── Error display tests ─────────────────────────────────────────────
 
 #[test]
