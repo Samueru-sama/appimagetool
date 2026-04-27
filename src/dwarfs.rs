@@ -29,30 +29,13 @@ pub fn resolve_mkdwarfs(config: &Config) -> Result<PathBuf> {
         return Ok(path);
     }
 
-    // Check cache
     let cached = config.tmpdir.join("mkdwarfs");
-    if cached.exists() {
-        return Ok(cached);
-    }
-
-    // Download
     let url = config
         .dwarfs_url
         .as_deref()
         .unwrap_or(DEFAULT_DWARFS_URL_TEMPLATE)
         .replace("{arch}", &config.arch);
-    crate::log_info!("Downloading mkdwarfs from {url}...");
-    util::download(&url, &cached)?;
-    set_executable(&cached)?;
-
-    if !util::is_elf(&cached) {
-        let _ = std::fs::remove_file(&cached);
-        return Err(Error::DownloadFailed {
-            url,
-            reason: "downloaded file is not a valid ELF binary".to_string(),
-        });
-    }
-
+    util::ensure_cached_binary(&cached, &url, "mkdwarfs")?;
     Ok(cached)
 }
 
@@ -295,13 +278,6 @@ fn unmount(mountpoint: &Path) {
         return;
     }
     let _ = try_cmd("umount", &["-l"]);
-}
-
-fn set_executable(path: &Path) -> Result<()> {
-    use std::os::unix::fs::PermissionsExt;
-    let perms = std::fs::Permissions::from_mode(0o755);
-    std::fs::set_permissions(path, perms)?;
-    Ok(())
 }
 
 /// Simple `which` implementation. Only matches a candidate if it's actually

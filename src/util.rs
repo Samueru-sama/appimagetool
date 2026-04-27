@@ -62,6 +62,33 @@ pub fn process_unique_path(dir: &Path, basename: &str) -> PathBuf {
     dir.join(format!("{basename}.{}", std::process::id()))
 }
 
+/// Ensure a cached binary exists at `cached`, downloading from `url` if missing
+/// or invalid. The downloaded file is marked executable and verified to be ELF.
+/// On verification failure the file is removed so the next run re-downloads.
+pub fn ensure_cached_binary(cached: &Path, url: &str, label: &str) -> Result<()> {
+    if cached.exists() && is_elf(cached) {
+        return Ok(());
+    }
+    crate::log_info!("Downloading {label} from {url}...");
+    download(url, cached)?;
+    set_executable(cached)?;
+    if !is_elf(cached) {
+        let _ = std::fs::remove_file(cached);
+        return Err(Error::DownloadFailed {
+            url: url.to_string(),
+            reason: "downloaded file is not a valid ELF binary".to_string(),
+        });
+    }
+    Ok(())
+}
+
+/// Mark a file as executable (0o755).
+pub fn set_executable(path: &Path) -> Result<()> {
+    use std::os::unix::fs::PermissionsExt;
+    std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o755))?;
+    Ok(())
+}
+
 /// Sanitize a string for use as a filename.
 /// Replaces characters that are problematic in filenames — including path
 /// separators and NUL — with underscores. The desktop entry's `Name=` field
