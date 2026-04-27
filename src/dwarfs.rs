@@ -304,12 +304,18 @@ fn set_executable(path: &Path) -> Result<()> {
     Ok(())
 }
 
-/// Simple `which` implementation.
+/// Simple `which` implementation. Only matches a candidate if it's actually
+/// executable — a non-`+x` file shadowing the binary on PATH would otherwise
+/// be returned and then fail at `Command::status` with a confusing error.
 fn which(name: &str) -> std::result::Result<PathBuf, ()> {
+    use std::os::unix::fs::PermissionsExt;
     let path_var = std::env::var("PATH").unwrap_or_default();
-    for dir in path_var.split(':') {
+    for dir in path_var.split(':').filter(|d| !d.is_empty()) {
         let candidate = PathBuf::from(dir).join(name);
-        if candidate.exists() {
+        let Ok(meta) = std::fs::metadata(&candidate) else {
+            continue;
+        };
+        if meta.is_file() && meta.permissions().mode() & 0o111 != 0 {
             return Ok(candidate);
         }
     }
