@@ -77,9 +77,15 @@ macro_rules! log_error {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::Mutex;
+
+    /// All log tests touch the global LEVEL atomic, so they must run
+    /// serialized — `cargo test` runs tests in parallel by default.
+    static GUARD: Mutex<()> = Mutex::new(());
 
     #[test]
     fn test_level_clamping() {
+        let _g = GUARD.lock().unwrap_or_else(|e| e.into_inner());
         init(5); // should clamp to 1 (debug)
         assert_eq!(LEVEL.load(Ordering::Relaxed), LEVEL_DEBUG);
 
@@ -91,12 +97,14 @@ mod tests {
 
     #[test]
     fn test_init_default() {
+        let _g = GUARD.lock().unwrap_or_else(|e| e.into_inner());
         init(0);
         assert_eq!(LEVEL.load(Ordering::Relaxed), LEVEL_INFO);
     }
 
     #[test]
     fn test_init_quiet() {
+        let _g = GUARD.lock().unwrap_or_else(|e| e.into_inner());
         init(-1);
         assert_eq!(LEVEL.load(Ordering::Relaxed), LEVEL_WARN);
 
@@ -108,6 +116,7 @@ mod tests {
 
     #[test]
     fn test_init_verbose() {
+        let _g = GUARD.lock().unwrap_or_else(|e| e.into_inner());
         init(1);
         assert_eq!(LEVEL.load(Ordering::Relaxed), LEVEL_DEBUG);
 
