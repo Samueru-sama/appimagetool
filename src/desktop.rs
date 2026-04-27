@@ -118,13 +118,14 @@ pub fn compute_output_name(app_name: &str, version: Option<&str>, arch: &str) ->
     }
 }
 
-/// Parse a key from a .desktop file (simple line-based parser).
+/// Parse a key from a .desktop file. Preserves whitespace inside the value —
+/// the desktop spec allows `Name=My App` and similar — but trims surrounding
+/// quotes and trailing CR (for CRLF files).
 fn parse_key(content: &str, key: &str) -> Option<String> {
     let prefix = format!("{key}=");
     for line in content.lines() {
         if let Some(rest) = line.strip_prefix(&prefix) {
-            let value = rest.split_whitespace().next().unwrap_or(rest);
-            let value = value.trim_matches('"');
+            let value = rest.trim_end_matches('\r').trim_matches('"');
             return Some(value.to_string());
         }
     }
@@ -147,8 +148,18 @@ mod tests {
     #[test]
     fn test_parse_key_with_spaces() {
         let content = "Name=My App\nExec=/usr/bin/my app\n";
-        assert_eq!(parse_key(content, "Name"), Some("My".to_string()));
-        assert_eq!(parse_key(content, "Exec"), Some("/usr/bin/my".to_string()));
+        assert_eq!(parse_key(content, "Name"), Some("My App".to_string()));
+        assert_eq!(
+            parse_key(content, "Exec"),
+            Some("/usr/bin/my app".to_string())
+        );
+    }
+
+    #[test]
+    fn test_parse_key_strips_crlf() {
+        let content = "Name=MyApp\r\nExec=myapp\r\n";
+        assert_eq!(parse_key(content, "Name"), Some("MyApp".to_string()));
+        assert_eq!(parse_key(content, "Exec"), Some("myapp".to_string()));
     }
 
     #[test]
