@@ -91,7 +91,7 @@ pub fn build(config: &Config) -> Result<()> {
         // environments (typically minimal containers) where FUSE isn't usable.
         dwarfs::check_fuse_available()?;
 
-        let tmp_appimage = config.tmpdir.join(".analyze");
+        let tmp_appimage = util::process_unique_path(&config.tmpdir, ".analyze");
         dwarfs::build_profile_image(&mkdwarfs, &config.appdir, &runtime_path, &tmp_appimage)?;
 
         // Make it executable

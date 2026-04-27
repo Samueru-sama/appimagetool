@@ -180,7 +180,7 @@ pub fn run_profiling(
 ) -> Result<()> {
     use std::os::unix::process::CommandExt;
 
-    let tmp_profile = tmpdir.join("dwarfsprof.tmp");
+    let tmp_profile = util::process_unique_path(tmpdir, "dwarfsprof.tmp");
 
     // Snapshot pre-existing AppImage FUSE mounts so we don't disturb other
     // running AppImages on the system when we clean up.

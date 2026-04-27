@@ -38,35 +38,29 @@ pub fn resolve_runtime(config: &Config) -> Result<PathBuf> {
 
     // Check cache in tmpdir (include arch in name for cross-builds)
     let cached = config.tmpdir.join(format!("uruntime-{}", config.arch));
-    if cached.exists() && util::is_elf(&cached) {
-        // Return a copy so the cached original stays pristine
-        let work = config.tmpdir.join(format!("uruntime-{}.work", config.arch));
-        std::fs::copy(&cached, &work)?;
-        set_executable(&work)?;
-        return Ok(work);
+    if !(cached.exists() && util::is_elf(&cached)) {
+        let url = config
+            .runtime_url
+            .as_deref()
+            .unwrap_or(DEFAULT_URL_TEMPLATE)
+            .replace("{arch}", &config.arch);
+
+        crate::log_info!("Downloading uruntime from {url}...");
+        util::download(&url, &cached)?;
+        set_executable(&cached)?;
+
+        if !util::is_elf(&cached) {
+            let _ = std::fs::remove_file(&cached);
+            return Err(Error::DownloadFailed {
+                url,
+                reason: "downloaded file is not a valid ELF binary".to_string(),
+            });
+        }
     }
 
-    // Download
-    let url = config
-        .runtime_url
-        .as_deref()
-        .unwrap_or(DEFAULT_URL_TEMPLATE)
-        .replace("{arch}", &config.arch);
-
-    crate::log_info!("Downloading uruntime from {url}...");
-    util::download(&url, &cached)?;
-    set_executable(&cached)?;
-
-    if !util::is_elf(&cached) {
-        let _ = std::fs::remove_file(&cached);
-        return Err(Error::DownloadFailed {
-            url,
-            reason: "downloaded file is not a valid ELF binary".to_string(),
-        });
-    }
-
-    // Return a working copy so the cached original stays pristine
-    let work = config.tmpdir.join(format!("uruntime-{}.work", config.arch));
+    // Return a per-process working copy so concurrent builds don't clobber
+    // each other and the cached original stays pristine.
+    let work = util::process_unique_path(&config.tmpdir, &format!("uruntime-{}.work", config.arch));
     std::fs::copy(&cached, &work)?;
     set_executable(&work)?;
     Ok(work)

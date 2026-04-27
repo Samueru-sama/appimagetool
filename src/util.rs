@@ -1,9 +1,12 @@
 use std::io::{Read, Write};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use crate::error::{Error, Result};
 
-/// Download a file with retries.
+/// Download a file with retries. The download is written to a per-process
+/// temp file alongside `dest` and atomically renamed on success, so two
+/// concurrent builds racing on the same cache path can't observe a torn
+/// half-downloaded file.
 pub fn download(url: &str, dest: &Path) -> Result<()> {
     let mut last_err = String::new();
     for attempt in 0..5 {
@@ -27,12 +30,36 @@ fn try_download(url: &str, dest: &Path) -> Result<()> {
         .call()
         .map_err(|e| std::io::Error::other(e.to_string()))?;
 
-    let mut file = std::fs::File::create(dest)?;
-    let reader = response.into_body().into_reader();
-    let mut reader = std::io::BufReader::new(reader);
-    std::io::copy(&mut reader, &mut file)?;
-    file.flush()?;
+    let staging = staging_path(dest);
+    {
+        let mut file = std::fs::File::create(&staging)?;
+        let reader = response.into_body().into_reader();
+        let mut reader = std::io::BufReader::new(reader);
+        if let Err(e) = std::io::copy(&mut reader, &mut file) {
+            let _ = std::fs::remove_file(&staging);
+            return Err(e.into());
+        }
+        file.flush()?;
+    }
+    if let Err(e) = std::fs::rename(&staging, dest) {
+        let _ = std::fs::remove_file(&staging);
+        return Err(e.into());
+    }
     Ok(())
+}
+
+/// Build a per-process staging path next to `dest` for atomic-rename writes.
+fn staging_path(dest: &Path) -> PathBuf {
+    let mut name = dest.file_name().unwrap_or_default().to_os_string();
+    name.push(format!(".partial.{}", std::process::id()));
+    dest.with_file_name(name)
+}
+
+/// Build a per-process unique path inside `dir` with the given basename. Used
+/// for transient files (profile tarballs, working copies of binaries) so two
+/// concurrent builds in the same TMPDIR don't clobber each other.
+pub fn process_unique_path(dir: &Path, basename: &str) -> PathBuf {
+    dir.join(format!("{basename}.{}", std::process::id()))
 }
 
 /// Sanitize a string for use as a filename.
