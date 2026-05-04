@@ -212,6 +212,41 @@ fn test_config_arch_detection() {
     assert_eq!(config.arch, "aarch64");
 }
 
+#[test]
+fn test_config_arch_falls_back_to_appimage_arch() {
+    let tmp = TempDir::new("appimagetool-test-arch-fallback");
+
+    let config = Config::from_cli_args(CliArgs {
+        appdir: Some(tmp.path().join("AppDir")),
+        appimage_arch: Some("aarch64".to_string()),
+        tmpdir: Some(tmp.path().to_path_buf()),
+        ..Default::default()
+    })
+    .unwrap();
+
+    assert_eq!(config.appimage_arch, "aarch64");
+    assert_eq!(config.arch, "aarch64");
+}
+
+#[test]
+fn test_config_arch_alias_keeps_runtime_arch() {
+    let tmp = TempDir::new("appimagetool-test-arch-alias");
+
+    // Display arch like `amd64` must not affect the runtime arch we use
+    // for downloads / X-AppImage-Arch metadata.
+    let config = Config::from_cli_args(CliArgs {
+        appdir: Some(tmp.path().join("AppDir")),
+        appimage_arch: Some("x86_64".to_string()),
+        arch: Some("amd64".to_string()),
+        tmpdir: Some(tmp.path().to_path_buf()),
+        ..Default::default()
+    })
+    .unwrap();
+
+    assert_eq!(config.appimage_arch, "x86_64");
+    assert_eq!(config.arch, "amd64");
+}
+
 // ─── Util tests ──────────────────────────────────────────────────────
 
 #[test]

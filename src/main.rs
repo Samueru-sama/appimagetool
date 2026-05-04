@@ -18,7 +18,12 @@ struct Cli {
     #[arg(short = 'n', long, env = "OUTNAME")]
     name: Option<String>,
 
-    /// Target architecture
+    /// Runtime architecture (download URL + X-AppImage-Arch metadata)
+    #[arg(long, env = "APPIMAGE_ARCH")]
+    appimage_arch: Option<String>,
+
+    /// Display architecture used in the output filename (e.g. `amd64`).
+    /// Falls back to --appimage-arch when unset.
     #[arg(long, env = "ARCH")]
     arch: Option<String>,
 
@@ -78,6 +83,7 @@ fn main() {
         appdir: cli.appdir,
         output: cli.output,
         output_name: cli.name,
+        appimage_arch: cli.appimage_arch,
         arch: cli.arch,
         runtime: cli.runtime,
         runtime_url: cli.runtime_url,

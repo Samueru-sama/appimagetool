@@ -25,7 +25,12 @@ pub struct Config {
     pub output_dir: PathBuf,
     /// Override for the output filename; otherwise derived from desktop entry.
     pub output_name: Option<String>,
-    /// Target architecture string (e.g. `x86_64`, `aarch64`).
+    /// Runtime architecture used for downloading uruntime/mkdwarfs and for
+    /// the `X-AppImage-Arch` metadata. Defaults to the host arch (`uname -m`).
+    pub appimage_arch: String,
+    /// Display architecture used in the output filename (e.g. `amd64`).
+    /// Falls back to [`Self::appimage_arch`] when not explicitly set —
+    /// some projects publish artifacts under aliases like `amd64`/`arm64`.
     pub arch: String,
     /// Explicit uruntime binary to embed; resolved/downloaded if `None`.
     pub runtime: Option<PathBuf>,
@@ -67,7 +72,12 @@ pub struct CliArgs {
     pub output: Option<PathBuf>,
     /// Override for the output filename.
     pub output_name: Option<String>,
-    /// Target architecture; defaults to host arch.
+    /// Runtime architecture (download URL + `X-AppImage-Arch` metadata).
+    /// Defaults to `APPIMAGE_ARCH` env / host arch.
+    pub appimage_arch: Option<String>,
+    /// Display architecture used in the output filename.
+    /// Defaults to [`Self::appimage_arch`] — set this to publish under an
+    /// alias like `amd64` while keeping the runtime arch as `x86_64`.
     pub arch: Option<String>,
     /// Path to a pre-supplied uruntime binary.
     pub runtime: Option<PathBuf>,
@@ -95,11 +105,15 @@ impl Config {
         // Env vars with clap `env =` are already resolved by the CLI.
         // The .or_else() calls below handle the library case (no clap).
 
-        let arch = args.arch.unwrap_or_else(|| match env::consts::ARCH {
-            "x86_64" => "x86_64".to_string(),
-            "aarch64" => "aarch64".to_string(),
-            other => other.to_string(),
-        });
+        let appimage_arch = args
+            .appimage_arch
+            .or_else(|| env_opt("APPIMAGE_ARCH"))
+            .unwrap_or_else(|| match env::consts::ARCH {
+                "x86_64" => "x86_64".to_string(),
+                "aarch64" => "aarch64".to_string(),
+                other => other.to_string(),
+            });
+        let arch = args.arch.unwrap_or_else(|| appimage_arch.clone());
 
         let appdir = args.appdir.unwrap_or_else(|| PathBuf::from("./AppDir"));
         let tmpdir = args.tmpdir.unwrap_or_else(|| PathBuf::from("/tmp"));
@@ -140,6 +154,7 @@ impl Config {
             appdir,
             output_dir: args.output.unwrap_or_else(|| PathBuf::from(".")),
             output_name: args.output_name,
+            appimage_arch,
             arch,
             runtime: args.runtime,
             runtime_url: args.runtime_url,

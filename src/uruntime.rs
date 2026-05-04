@@ -40,17 +40,22 @@ pub fn resolve_runtime(config: &Config) -> Result<PathBuf> {
     }
 
     // Cache in tmpdir (include arch in name for cross-builds).
-    let cached = config.tmpdir.join(format!("uruntime-{}", config.arch));
+    let cached = config
+        .tmpdir
+        .join(format!("uruntime-{}", config.appimage_arch));
     let url = config
         .runtime_url
         .as_deref()
         .unwrap_or(DEFAULT_URL_TEMPLATE)
-        .replace("{arch}", &config.arch);
+        .replace("{arch}", &config.appimage_arch);
     util::ensure_cached_binary(&cached, &url, "uruntime")?;
 
     // Return a per-process working copy so concurrent builds don't clobber
     // each other and the cached original stays pristine.
-    let work = util::process_unique_path(&config.tmpdir, &format!("uruntime-{}.work", config.arch));
+    let work = util::process_unique_path(
+        &config.tmpdir,
+        &format!("uruntime-{}.work", config.appimage_arch),
+    );
     std::fs::copy(&cached, &work)?;
     util::set_executable(&work)?;
     Ok(work)

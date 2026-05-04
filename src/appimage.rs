@@ -61,10 +61,12 @@ pub fn build(config: &Config) -> Result<()> {
         config.update_info.clone()
     };
 
-    // Add X-AppImage-* metadata to desktop entry
-    desktop.add_appimage_metadata(&app_name, version, &config.arch)?;
+    // Add X-AppImage-* metadata to desktop entry. Uses the runtime arch so
+    // the metadata reflects the actual binary, not a display alias.
+    desktop.add_appimage_metadata(&app_name, version, &config.appimage_arch)?;
 
-    // Compute output filename
+    // Compute output filename. Uses the display arch so projects can publish
+    // under aliases like `amd64` while still pulling an `x86_64` runtime.
     let output_name = config
         .output_name
         .clone()
@@ -134,8 +136,13 @@ pub fn build(config: &Config) -> Result<()> {
         generate_zsync(&output_path, &output_name, &config.output_dir)?;
     }
 
-    // Write appinfo file
-    write_appinfo(&config.output_dir, &app_name, version, &config.arch)?;
+    // Write appinfo file (runtime arch — matches the desktop entry metadata).
+    write_appinfo(
+        &config.output_dir,
+        &app_name,
+        version,
+        &config.appimage_arch,
+    )?;
 
     crate::log_info!("All done! AppImage at: {}", output_path.display());
 

@@ -37,7 +37,7 @@ pub fn resolve_mkdwarfs(config: &Config) -> Result<PathBuf> {
         .dwarfs_url
         .as_deref()
         .unwrap_or(DEFAULT_DWARFS_URL_TEMPLATE)
-        .replace("{arch}", &config.arch);
+        .replace("{arch}", &config.appimage_arch);
     util::ensure_cached_binary(&cached, &url, "mkdwarfs")?;
     Ok(cached)
 }
