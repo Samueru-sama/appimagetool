@@ -110,7 +110,12 @@ pub fn build(config: &Config) -> Result<()> {
             .cloned()
             .unwrap_or_else(|| config.appdir.join(".dwarfsprofile"));
 
-        dwarfs::run_profiling(&tmp_appimage, &profile_path, &config.tmpdir, 10)?;
+        dwarfs::run_profiling(
+            &tmp_appimage,
+            &profile_path,
+            &config.tmpdir,
+            config.profile_timeout,
+        )?;
 
         Some(profile_path)
     } else {

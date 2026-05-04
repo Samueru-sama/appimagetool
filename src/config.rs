@@ -58,6 +58,9 @@ pub struct Config {
     pub keep_mount: bool,
     /// Tag the build as a nightly/devel release (rewrites desktop name + zsync).
     pub devel_release: bool,
+    /// How long, in seconds, to let the AppImage run during the DWARFS
+    /// profiling pass before tearing it down.
+    pub profile_timeout: u64,
 }
 
 /// Inputs gathered from the CLI (or set explicitly by library callers).
@@ -97,6 +100,14 @@ pub struct CliArgs {
     pub dwarfs_url: Option<String>,
     /// Override TMPDIR.
     pub tmpdir: Option<PathBuf>,
+    /// Patch the runtime to keep the FUSE mount alive after exit.
+    /// Also enabled by `URUNTIME_PRELOAD=1`.
+    pub keep_mount: bool,
+    /// Tag the build as a nightly/devel release.
+    /// Also enabled by `DEVEL_RELEASE=1`.
+    pub devel_release: bool,
+    /// Override the DWARFS profiling timeout (seconds). Defaults to `10`.
+    pub profile_timeout: Option<u64>,
 }
 
 impl Config {
@@ -120,8 +131,13 @@ impl Config {
 
         let optimize_launch = args.optimize_launch || env_truthy("OPTIMIZE_LAUNCH");
 
-        let keep_mount = env_truthy("URUNTIME_PRELOAD");
-        let devel_release = env_truthy("DEVEL_RELEASE");
+        let keep_mount = args.keep_mount || env_truthy("URUNTIME_PRELOAD");
+        let devel_release = args.devel_release || env_truthy("DEVEL_RELEASE");
+
+        let profile_timeout = args
+            .profile_timeout
+            .or_else(|| env_opt("OPTIMIZE_LAUNCH_TIMEOUT").and_then(|s| s.parse().ok()))
+            .unwrap_or(10);
 
         let update_info = args.update_info.or_else(|| env_opt("UPINFO")).or_else(|| {
             env::var("GITHUB_REPOSITORY").ok().map(|repo| {
@@ -169,6 +185,7 @@ impl Config {
             tmpdir,
             keep_mount,
             devel_release,
+            profile_timeout,
         })
     }
 }

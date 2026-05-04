@@ -193,23 +193,27 @@ fn test_config_defaults() {
     assert!(!config.optimize_launch);
     assert!(!config.keep_mount);
     assert!(!config.devel_release);
+    assert_eq!(config.profile_timeout, 10);
     // Default compression
     assert_eq!(config.dwarfs_comp, "zstd:level=22 -S26 -B6");
 }
 
 #[test]
-fn test_config_arch_detection() {
+fn test_config_display_arch_does_not_change_runtime_arch() {
     let tmp = TempDir::new("appimagetool-test");
 
+    // Use an alias that can't accidentally match the host arch so we
+    // can assert the runtime arch stayed at its host-default.
     let config = Config::from_cli_args(CliArgs {
         appdir: Some(tmp.path().join("AppDir")),
-        arch: Some("aarch64".to_string()),
+        arch: Some("amd64-alias".to_string()),
         tmpdir: Some(tmp.path().to_path_buf()),
         ..Default::default()
     })
     .unwrap();
 
-    assert_eq!(config.arch, "aarch64");
+    assert_eq!(config.arch, "amd64-alias");
+    assert_ne!(config.appimage_arch, "amd64-alias");
 }
 
 #[test]

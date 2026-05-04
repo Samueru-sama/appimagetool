@@ -47,6 +47,18 @@ struct Cli {
     #[arg(long)]
     optimize_launch: bool,
 
+    /// Profiling timeout in seconds (default 10)
+    #[arg(long, env = "OPTIMIZE_LAUNCH_TIMEOUT")]
+    profile_timeout: Option<u64>,
+
+    /// Patch the runtime so the FUSE mount stays alive after the app exits
+    #[arg(long)]
+    keep_mount: bool,
+
+    /// Tag the build as a nightly/devel release
+    #[arg(long)]
+    devel_release: bool,
+
     /// Path to DWARFS profile
     #[arg(long, env = "DWARFSPROF")]
     dwarfs_profile: Option<PathBuf>,
@@ -94,6 +106,9 @@ fn main() {
         mkdwarfs: cli.mkdwarfs,
         dwarfs_url: cli.dwarfs_url,
         tmpdir: cli.tmpdir,
+        keep_mount: cli.keep_mount,
+        devel_release: cli.devel_release,
+        profile_timeout: cli.profile_timeout,
     })
     .unwrap_or_else(|e| {
         appimagetool::log_error!("{e}");

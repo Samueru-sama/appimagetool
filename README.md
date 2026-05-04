@@ -77,6 +77,9 @@ Options:
   -u, --update-info <UPINFO>       Update information string [env: UPINFO]
       --dwarfs-comp <COMP>         DWARFS compression options [env: DWARFS_COMP]
       --optimize-launch            Enable DWARFS profile optimization (also via OPTIMIZE_LAUNCH=1)
+      --profile-timeout <SECS>     Profiling timeout in seconds [env: OPTIMIZE_LAUNCH_TIMEOUT] [default: 10]
+      --keep-mount                 Keep the FUSE mount alive after exit (also via URUNTIME_PRELOAD=1)
+      --devel-release              Tag the build as a nightly/devel release (also via DEVEL_RELEASE=1)
       --dwarfs-profile <PROFILE>   Path to DWARFS profile [env: DWARFSPROF]
       --mkdwarfs <PATH>            Path to mkdwarfs binary [env: DWARFS_CMD]
       --dwarfs-url <URL>           URL to download mkdwarfs from [env: DWARFS_LINK]
@@ -100,6 +103,7 @@ Every CLI option has a matching env var (shown above). A few extra knobs that ar
 | `URUNTIME_PRELOAD`   | Set to `1` to keep the FUSE mount after the app exits.                                  |
 | `DEVEL_RELEASE`      | Set to `1` to tag the build as a nightly/devel release.                                 |
 | `OPTIMIZE_LAUNCH`    | Set to `1` to enable the DWARFS profiling pass (same as `--optimize-launch`).           |
+| `OPTIMIZE_LAUNCH_TIMEOUT` | Profiling timeout in seconds (default `10`).                                       |
 
 ### AppDir requirements
 
