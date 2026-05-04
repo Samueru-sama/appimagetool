@@ -1,93 +1,125 @@
 # appimagetool
 
-A Rust implementation of **appimagetool** for the [Anylinux-AppImages](https://github.com/pkgforge-dev/Anylinux-AppImages) project.
+A Rust implementation of `appimagetool` for the [Anylinux-AppImages](https://github.com/pkgforge-dev/Anylinux-AppImages) project.
 
-Takes a prepared AppDir and produces a finished AppImage using DWARFS compression and the [uruntime](https://github.com/VHSgunzo/uruntime) AppImage runtime.
+It takes a prepared AppDir and produces a finished `.AppImage` using DWARFS compression and the [uruntime](https://github.com/VHSgunzo/uruntime) AppImage runtime. Single binary, no Python, no C++ deps.
+
+## Quick start
+
+```sh
+appimagetool ./AppDir
+```
+
+That's it. The tool will:
+
+1. Validate the AppDir (checks for `AppRun`, `.DirIcon`, one `.desktop` file).
+2. Download `mkdwarfs` and `uruntime` if they're not already cached.
+3. Write `X-AppImage-*` metadata into the desktop entry.
+4. Build the DWARFS image with the runtime embedded as the ELF header.
+5. Generate a `.zsync` file when update info is set, plus an `appinfo` sidecar.
 
 ## Features
 
-- **DWARFS compression** — efficient delta-friendly AppImages
-- **uruntime integration** — automatic download & ELF section configuration
-- **Profile-guided optimization** — optional DWARFS hotness profiling for faster launches
-- **zsync generation** — automatic delta update support via update information
-- **Decentralized** — no central repository required
-- **Single binary** — no runtime dependencies (no Python, no C++ libs)
+- DWARFS compression for small, delta-friendly AppImages.
+- Drop-in uruntime integration with automatic download and ELF section patching.
+- Optional profile-guided optimization (DWARFS hotness profiling) for faster launches.
+- Built-in zsync generation, no `zsyncmake` shell-out.
+- No central repository, no daemon, no extra runtime deps.
 
 ## Usage
 
-### Basic
+### Typical build
 
 ```sh
-appimagetool /path/to/AppDir
-```
-
-### With options
-
-```sh
-appimagetool \
-  --appdir ./build/AppDir \
+appimagetool ./build/AppDir \
   --output ./dist \
-  --update-info "gh-releases-zsync|org|repo|latest|*-x86_64.AppImage.zsync" \
-  --arch x86_64
+  --update-info "gh-releases-zsync|org|repo|latest|*-x86_64.AppImage.zsync"
 ```
 
-### All options
+### CI / GitHub Actions
+
+If `GITHUB_REPOSITORY` is set, update info is auto-derived as
+`gh-releases-zsync|owner|repo|latest|*<arch>.AppImage.zsync`. So in CI you usually just need:
+
+```sh
+VERSION=1.2.3 appimagetool ./AppDir --output ./dist
+```
+
+### Cross-arch / aliased filenames
+
+The tool tracks two arches separately:
+
+- `APPIMAGE_ARCH` is the *runtime* arch. It picks which `mkdwarfs` and `uruntime` binaries to download, and shows up in `X-AppImage-Arch` metadata. Defaults to the host arch.
+- `ARCH` is the *display* arch. It only affects the output filename. Falls back to `APPIMAGE_ARCH` when unset.
+
+This lets a project publish under an alias like `amd64` while still pulling the correct `x86_64` runtime:
+
+```sh
+APPIMAGE_ARCH=x86_64 ARCH=amd64 appimagetool ./AppDir
+# produces MyApp-1.2.3-anylinux-amd64.AppImage with X-AppImage-Arch=x86_64
+```
+
+### All CLI options
 
 ```
-Usage: appimagetool [OPTIONS]
+Usage: appimagetool [OPTIONS] [APPDIR]
+
+Arguments:
+  [APPDIR]  Path to the AppDir directory [env: APPDIR] [default: ./AppDir]
 
 Options:
-      --appdir <APPDIR>            Path to the AppDir directory [env: APPDIR] [default: ./AppDir]
   -o, --output <OUTPUT>            Output directory [env: OUTPATH] [default: .]
-  -n, --name <NAME>                Output filename (auto-detected from .desktop if not set) [env: OUTNAME]
-      --arch <ARCH>                Target architecture [env: ARCH]
+  -n, --name <NAME>                Output filename (auto-detected from .desktop) [env: OUTNAME]
+      --appimage-arch <ARCH>       Runtime arch (download URL + X-AppImage-Arch) [env: APPIMAGE_ARCH]
+      --arch <ARCH>                Display arch used in the output filename [env: ARCH]
       --runtime <RUNTIME>          Path to uruntime binary [env: RUNTIME]
-      --runtime-url <RUNTIME_URL>  URL to download uruntime from [env: URUNTIME_LINK]
-  -u, --update-info <UPDATE_INFO>  Update information string [env: UPINFO]
-      --dwarfs-comp <DWARFS_COMP>  DWARFS compression options [env: DWARFS_COMP]
-      --optimize-launch            Enable DWARFS profile optimization [env: OPTIMIZE_LAUNCH]
+      --runtime-url <URL>          URL to download uruntime from [env: URUNTIME_LINK]
+  -u, --update-info <UPINFO>       Update information string [env: UPINFO]
+      --dwarfs-comp <COMP>         DWARFS compression options [env: DWARFS_COMP]
+      --optimize-launch            Enable DWARFS profile optimization (also via OPTIMIZE_LAUNCH=1)
       --dwarfs-profile <PROFILE>   Path to DWARFS profile [env: DWARFSPROF]
-      --mkdwarfs <MKDWARFS>        Path to mkdwarfs binary [env: DWARFS_CMD]
-      --dwarfs-url <DWARFS_URL>    URL to download mkdwarfs from [env: DWARFS_LINK]
+      --mkdwarfs <PATH>            Path to mkdwarfs binary [env: DWARFS_CMD]
+      --dwarfs-url <URL>           URL to download mkdwarfs from [env: DWARFS_LINK]
       --tmpdir <TMPDIR>            Temporary directory [env: TMPDIR] [default: /tmp]
-  -v, --verbose...                 Increase verbosity (can be repeated: -v, -vv)
-  -q, --quiet...                   Suppress informational output (can be repeated: -q, -qq)
+  -v, --verbose...                 Increase verbosity (-v, -vv)
+  -q, --quiet...                   Suppress informational output (-q, -qq)
   -h, --help                       Print help
   -V, --version                    Print version
 ```
 
 ### Environment variables
 
-All CLI options have corresponding environment variables (shown above). Additional env vars:
+Every CLI option has a matching env var (shown above). A few extra knobs that are env-only:
 
-| Variable | Description |
-|---|---|
-| `VERSION` | Version string embedded in the AppImage filename and metadata |
-| `APPNAME` | Override the application name (default: from .desktop `Name`) |
-| `GITHUB_REPOSITORY` | Auto-generates update info as `gh-releases-zsync\|owner\|repo\|latest\|*<arch>.AppImage.zsync` |
-| `ADD_PERMA_ENV_VARS` | Permanent env vars to embed in the runtime (newline-separated) |
-| `URUNTIME_PRELOAD` | Set to `1` to keep the FUSE mount after launch |
-| `DEVEL_RELEASE` | Set to `1` to mark as a nightly/development build |
-| `DWARFS_LINK` | Custom URL for downloading mkdwarfs |
-| `DWARFSPROF` | Path to a pre-built DWARFS profile |
+| Variable             | Effect                                                                                  |
+| -------------------- | --------------------------------------------------------------------------------------- |
+| `VERSION`            | Version string baked into the AppImage filename and metadata.                           |
+| `APPNAME`            | Override the application name (defaults to the desktop entry's `Name`).                 |
+| `GITHUB_REPOSITORY`  | When set, auto-generates `update_info` as `gh-releases-zsync\|owner\|repo\|latest\|...` |
+| `ADD_PERMA_ENV_VARS` | Permanent env vars to bake into the runtime, one per line.                              |
+| `URUNTIME_PRELOAD`   | Set to `1` to keep the FUSE mount after the app exits.                                  |
+| `DEVEL_RELEASE`      | Set to `1` to tag the build as a nightly/devel release.                                 |
+| `OPTIMIZE_LAUNCH`    | Set to `1` to enable the DWARFS profiling pass (same as `--optimize-launch`).           |
 
 ### AppDir requirements
 
 The AppDir must contain:
 
-1. **`AppRun`** — executable entry point script
-2. **`.DirIcon`** — icon file (PNG or SVG)
-3. **Exactly one `.desktop` file** in the root directory
+1. An executable `AppRun`.
+2. A `.DirIcon` file (PNG or SVG).
+3. Exactly one `.desktop` file in the AppDir root.
 
 ### Output filename
 
-By default the output filename is computed as:
+By default:
 
 ```
 <AppName>-<Version>-anylinux-<Arch>.AppImage
 ```
 
-Where `AppName` comes from the .desktop `Name` key, `Version` from the `VERSION` env var, and `Arch` from `--arch` or auto-detected.
+Where `AppName` comes from the `.desktop` `Name` key (or `APPNAME`), `Version` from `VERSION` (or `~/version`), and `Arch` is the display arch (`ARCH`, falling back to `APPIMAGE_ARCH`).
+
+You can also pin the filename outright with `--name` / `OUTNAME`.
 
 ## Building
 
@@ -105,19 +137,19 @@ cargo test --all-features
 cargo test --all-features -- --ignored
 ```
 
-## Architecture
+## Project layout
 
 ```
 src/
-├── main.rs       # CLI entry point (clap)
-├── lib.rs        # Library root
-├── appimage.rs   # Build pipeline orchestration
-├── config.rs     # Configuration from CLI args + env vars
-├── desktop.rs    # .desktop file parsing and metadata
-├── dwarfs.rs     # mkdwarfs resolution, image building, profiling
-├── elf.rs        # ELF section read/write/patch
-├── error.rs      # Error types with actionable hints
-├── log.rs        # Structured logging with verbosity levels
-├── uruntime.rs   # Runtime download, caching, configuration
-└── util.rs       # Download with retry, sanitize, ELF detection
+├── main.rs       CLI entry point (clap)
+├── lib.rs        library root
+├── appimage.rs   build pipeline orchestration
+├── config.rs     CLI args + env var resolution
+├── desktop.rs    .desktop parsing and metadata
+├── dwarfs.rs     mkdwarfs resolution, image building, profiling
+├── elf.rs        ELF section read / write / patch
+├── error.rs      error types with actionable hints
+├── log.rs        verbosity-gated logger
+├── uruntime.rs   runtime download, caching, configuration
+└── util.rs       atomic downloads, sanitization, ELF detection
 ```
