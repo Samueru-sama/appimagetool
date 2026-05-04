@@ -19,9 +19,10 @@ const MOUNT_PATCH_PATTERNS: &[&str] = &[
     "URUNTIME_MOUNT=0",
 ];
 
-/// Default uruntime download URL pattern.
-/// `{arch}` gets replaced with the target architecture.
-const DEFAULT_URL_TEMPLATE: &str = "https://github.com/VHSgunzo/uruntime/releases/latest/download/uruntime-appimage-dwarfs-lite-{arch}";
+/// Default uruntime download URL pattern. Pinned for reproducible builds;
+/// override with `--runtime-url` / `URUNTIME_LINK` to track a different
+/// release. `{arch}` gets replaced with the target architecture.
+const DEFAULT_URL_TEMPLATE: &str = "https://github.com/VHSgunzo/uruntime/releases/download/v0.5.7/uruntime-appimage-dwarfs-lite-{arch}";
 
 /// Ensure a runtime binary is available. Returns the path to the runtime.
 ///
