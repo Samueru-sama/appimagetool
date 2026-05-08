@@ -107,13 +107,6 @@ pub fn read_section<'a>(data: &'a [u8], name: &str) -> Option<&'a [u8]> {
     slice_range(data, off, size)
 }
 
-/// Find the offset and size of an ELF section by name.
-pub fn find_section(data: &[u8], name: &str) -> Option<(usize, usize)> {
-    let info = ElfInfo::parse(data)?;
-    let idx = info.find_section_idx(data, name.as_bytes())?;
-    info.section_offset_size(data, idx)
-}
-
 /// Write data into an ELF section by name. The data is null-padded to fill the section.
 pub fn write_section(data: &mut [u8], name: &str, value: &[u8]) -> Result<()> {
     let info = ElfInfo::parse(data).ok_or(Error::MalformedElf)?;
@@ -150,37 +143,6 @@ pub fn write_section_file(path: &Path, name: &str, value: &[u8]) -> Result<()> {
     write_section(&mut data, name, value)?;
     std::fs::write(path, data)?;
     Ok(())
-}
-
-/// Replace a string pattern inside an ELF section (for patching runtime config).
-/// Returns `Ok(true)` if the pattern was found and replaced, `Ok(false)` otherwise.
-pub fn patch_section_string(
-    data: &mut [u8],
-    section_name: &str,
-    pattern: &str,
-    replacement: &str,
-) -> Result<bool> {
-    let (offset, size) = find_section(data, section_name)
-        .ok_or_else(|| Error::SectionNotFound(section_name.to_string()))?;
-
-    let end = offset.checked_add(size).ok_or(Error::MalformedElf)?;
-    let section = data.get(offset..end).ok_or(Error::MalformedElf)?;
-    let section_str = String::from_utf8_lossy(section);
-
-    let Some(pos) = section_str.find(pattern) else {
-        return Ok(false);
-    };
-
-    let byte_pos = offset.checked_add(pos).ok_or(Error::MalformedElf)?;
-    let pat_len = pattern.len();
-    let rep_len = replacement.len().min(pat_len);
-    let pat_end = byte_pos.checked_add(pat_len).ok_or(Error::MalformedElf)?;
-    let region = data.get_mut(byte_pos..pat_end).ok_or(Error::MalformedElf)?;
-    region[..rep_len].copy_from_slice(&replacement.as_bytes()[..rep_len]);
-    if rep_len < pat_len {
-        region[rep_len..].fill(0);
-    }
-    Ok(true)
 }
 
 /// Helper: bounds-checked subslice with explicit length.
@@ -249,23 +211,6 @@ mod tests {
     }
 
     #[test]
-    fn test_patch_section_string() {
-        let mut elf = create_test_elf(b".cfg", b"MOUNT=3AAAAAAAAA");
-        let patched = patch_section_string(&mut elf, ".cfg", "MOUNT=3", "MOUNT=0").unwrap();
-        assert!(patched, "patch should report success when pattern matches");
-        let section = read_section(&elf, ".cfg").unwrap();
-        let s = String::from_utf8_lossy(section);
-        assert!(s.starts_with("MOUNT=0"));
-    }
-
-    #[test]
-    fn test_patch_section_string_no_match() {
-        let mut elf = create_test_elf(b".cfg", b"MOUNT=3AAAAAAAAA");
-        let patched = patch_section_string(&mut elf, ".cfg", "ABSENT=9", "ABSENT=0").unwrap();
-        assert!(!patched, "patch should report no-op when pattern is absent");
-    }
-
-    #[test]
     fn test_parse_rejects_short_input() {
         // Truncated header — must not panic, must reject.
         assert!(read_section(b"", ".test").is_none());
@@ -303,7 +248,6 @@ mod tests {
         }
         // Must not panic; either parses to None or returns None on lookup.
         let _ = read_section(&elf, ".test");
-        let _ = find_section(&elf, ".test");
     }
 
     /// Create a minimal ELF64 LE binary with one custom section.

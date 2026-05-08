@@ -8,16 +8,8 @@ use crate::elf;
 use crate::error::{Error, Result};
 use crate::util;
 
-/// Sections that may carry the URUNTIME_MOUNT marker, in priority order.
-const MOUNT_PATCH_SECTIONS: &[&str] = &[".upd_info", ".envs"];
-
-/// Existing marker values we know how to rewrite.
-const MOUNT_PATCH_PATTERNS: &[&str] = &[
-    "URUNTIME_MOUNT=3",
-    "URUNTIME_MOUNT=2",
-    "URUNTIME_MOUNT=1",
-    "URUNTIME_MOUNT=0",
-];
+/// Marker uruntime ships in `.rodata` to advertise its mount mode.
+const MOUNT_MARKER: &[u8] = b"URUNTIME_MOUNT=";
 
 /// Default uruntime download URL pattern. Pinned for reproducible builds;
 /// override with `--runtime-url` / `URUNTIME_LINK` to track a different
@@ -94,26 +86,93 @@ pub fn configure_runtime(
     Ok(())
 }
 
-/// Rewrite any `URUNTIME_MOUNT=<n>` marker found in the runtime's config sections
-/// to `URUNTIME_MOUNT=0` (keep-mount). Returns an error if no marker is found
-/// in any known section — silently leaving the runtime unmodified would mask a
-/// real runtime/version mismatch.
+/// Rewrite every `URUNTIME_MOUNT=<digit>` occurrence in the runtime to
+/// `URUNTIME_MOUNT=0` (keep-mount). The marker lives in `.rodata` (a string
+/// literal in the runtime source), not in `.upd_info` or `.envs`, so we scan
+/// the whole binary. The rewrite is byte-for-byte (one digit → '0'), so no
+/// ELF reflow is needed. Returns an error if the marker is absent entirely —
+/// silently leaving the runtime unmodified would mask a real version mismatch.
 fn patch_keep_mount(data: &mut [u8]) -> Result<()> {
-    for section in MOUNT_PATCH_SECTIONS {
-        // Skip sections the runtime doesn't carry.
-        if elf::find_section(data, section).is_none() {
-            continue;
+    let mut patched = 0usize;
+    let mut start = 0;
+    while let Some(pos) = find_subslice(&data[start..], MOUNT_MARKER) {
+        let digit_idx = start + pos + MOUNT_MARKER.len();
+        if let Some(b) = data.get_mut(digit_idx)
+            && b.is_ascii_digit()
+        {
+            *b = b'0';
+            patched += 1;
         }
-        for pattern in MOUNT_PATCH_PATTERNS {
-            if elf::patch_section_string(data, section, pattern, "URUNTIME_MOUNT=0")? {
-                return Ok(());
-            }
-        }
+        start = digit_idx;
     }
-    Err(Error::Config(
-        "could not patch URUNTIME_MOUNT: marker not found in .upd_info or .envs\n  \
-         hint: this runtime build may not support URUNTIME_PRELOAD; \
-         try a newer uruntime release"
-            .to_string(),
-    ))
+    if patched == 0 {
+        return Err(Error::Config(
+            "could not patch URUNTIME_MOUNT: marker not found in runtime\n  \
+             hint: this runtime build may not support URUNTIME_PRELOAD; \
+             try a newer uruntime release"
+                .to_string(),
+        ));
+    }
+    Ok(())
+}
+
+fn find_subslice(haystack: &[u8], needle: &[u8]) -> Option<usize> {
+    haystack.windows(needle.len()).position(|w| w == needle)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn patch_keep_mount_rewrites_digit() {
+        let mut data = Vec::new();
+        data.extend_from_slice(&[0u8; 64]);
+        data.extend_from_slice(b"URUNTIME_MOUNT=3");
+        data.extend_from_slice(&[0u8; 32]);
+        let digit_idx = 64 + MOUNT_MARKER.len();
+
+        patch_keep_mount(&mut data).unwrap();
+        assert_eq!(data[digit_idx], b'0');
+    }
+
+    #[test]
+    fn patch_keep_mount_rewrites_all_occurrences() {
+        let prefix_a = b"URUNTIME_MOUNT=3";
+        let gap = [0u8; 16];
+        let prefix_b = b"URUNTIME_MOUNT=2";
+        let mut data = Vec::new();
+        data.extend_from_slice(prefix_a);
+        data.extend_from_slice(&gap);
+        data.extend_from_slice(prefix_b);
+        let first = MOUNT_MARKER.len();
+        let second = prefix_a.len() + gap.len() + MOUNT_MARKER.len();
+
+        patch_keep_mount(&mut data).unwrap();
+        assert_eq!(data[first], b'0');
+        assert_eq!(data[second], b'0');
+    }
+
+    #[test]
+    fn patch_keep_mount_idempotent_on_zero() {
+        let mut data = b"...URUNTIME_MOUNT=0...".to_vec();
+        let before = data.clone();
+        patch_keep_mount(&mut data).unwrap();
+        assert_eq!(data, before);
+    }
+
+    #[test]
+    fn patch_keep_mount_skips_non_digit_followers() {
+        // The runtime ships a format string like "URUNTIME_MOUNT==0" alongside
+        // the real marker. Without a real digit in any occurrence, we must
+        // report failure rather than silently no-op.
+        let mut data = b"URUNTIME_MOUNT==0".to_vec();
+        assert!(patch_keep_mount(&mut data).is_err());
+    }
+
+    #[test]
+    fn patch_keep_mount_errors_when_absent() {
+        let mut data = vec![0u8; 256];
+        assert!(patch_keep_mount(&mut data).is_err());
+    }
 }
