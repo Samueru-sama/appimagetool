@@ -111,7 +111,6 @@ pub fn build_profile_image(
 
     let status = Command::new(mkdwarfs)
         .arg("--force")
-        .arg("--order=path")
         .arg("--set-owner")
         .arg("0")
         .arg("--set-group")
